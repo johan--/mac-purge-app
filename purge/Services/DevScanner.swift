@@ -18,7 +18,25 @@ final class DevScanner {
         "npm Cache": "npm",
         "pnpm Store": "pnpm",
         "Yarn Cache": "yarn",
-        "CocoaPods": "cocoapods"
+        "CocoaPods": "cocoapods",
+        "Git Worktrees": "gitworktrees",
+        "VS Code Cache": "vscode",
+        "Cursor Cache": "cursor",
+        "JetBrains Cache": "jetbrains",
+        "Zed Cache": "zed",
+        "Go Module Cache": "go",
+        "Maven Cache": "maven",
+        "SBT Cache": "sbt",
+        "Ruby Gems": "rubygems",
+        "Bundler Cache": "bundler",
+        "Composer Cache": "composer",
+        "Cargo Registry": "cargo",
+        "Terraform Cache": "terraform",
+        "GitHub Actions Cache": "githubactions",
+        "Vagrant Cache": "vagrant",
+        "Zsh Cache": "zsh",
+        "Electron App Caches": "electron",
+        "Playwright Browsers": "playwright"
     ]
 
     private func safetyInfo(forToolLabel toolLabel: String, primaryPath: URL?) -> SafetyInfo {
@@ -39,6 +57,85 @@ final class DevScanner {
         )
     }
 
+    // MARK: - Docker size calculation
+
+    private func dockerDiskUsageBytes() -> Int64 {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/local/bin/docker")
+        process.arguments = ["system", "df", "--format", "{{json .}}"]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+
+            if process.terminationStatus == 0 {
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                if let output = String(data: data, encoding: .utf8) {
+                    return parseDockerDFOutput(output)
+                }
+            }
+        } catch {}
+
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let rawPaths = [
+            home.appendingPathComponent("Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw"),
+            home.appendingPathComponent("Library/Group Containers/group.com.docker/Data/vms/0/data/Docker.raw")
+        ]
+
+        for path in rawPaths {
+            if FileManager.default.fileExists(atPath: path.path) {
+                if let attrs = try? FileManager.default.attributesOfItem(atPath: path.path),
+                   let size = attrs[.size] as? Int64 {
+                    return size
+                }
+            }
+        }
+
+        let containerPath = home.appendingPathComponent(
+            "Library/Containers/com.docker.docker", isDirectory: true
+        )
+        return FolderSizing.directoryByteSize(at: containerPath)
+    }
+
+    private func parseDockerDFOutput(_ output: String) -> Int64 {
+        var total: Int64 = 0
+        let lines = output.components(separatedBy: .newlines).filter { !$0.isEmpty }
+        for line in lines {
+            guard let data = line.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let sizeString = json["Size"] as? String else { continue }
+            total += parseDockerSizeString(sizeString)
+        }
+        return total
+    }
+
+    private func parseDockerSizeString(_ size: String) -> Int64 {
+        let trimmed = size.trimmingCharacters(in: .whitespaces)
+        if trimmed == "0B" || trimmed == "0" { return 0 }
+
+        let units: [(String, Int64)] = [
+            ("TB", 1_000_000_000_000),
+            ("GB", 1_000_000_000),
+            ("MB", 1_000_000),
+            ("KB", 1_000),
+            ("B", 1)
+        ]
+
+        for (unit, multiplier) in units {
+            if trimmed.hasSuffix(unit) {
+                let numberString = String(trimmed.dropLast(unit.count))
+                if let value = Double(numberString) {
+                    return Int64(value * Double(multiplier))
+                }
+            }
+        }
+        return 0
+    }
+
     // MARK: - Global dev tool caches
 
     private func scanGlobalCaches() -> [DevTool] {
@@ -57,20 +154,126 @@ final class DevScanner {
             ("Gradle Cache", "gearshape.2.fill", [home.appendingPathComponent(".gradle/caches", isDirectory: true)]),
             ("Flutter Cache", "swift", [home.appendingPathComponent(".flutter", isDirectory: true)]),
             ("Android SDK .gradle", "android", [home.appendingPathComponent(".android", isDirectory: true)]),
-            ("Docker Desktop", "shippingbox.fill", [home.appendingPathComponent("Library/Containers/com.docker.docker", isDirectory: true)])
+            ("Docker Desktop", "shippingbox.fill", [home.appendingPathComponent("Library/Containers/com.docker.docker", isDirectory: true)]),
+
+            // Git
+            ("Git Worktrees", "arrow.triangle.branch", [
+                home.appendingPathComponent(".git/worktrees", isDirectory: true)
+            ]),
+
+            // IDE Caches
+            ("VS Code Cache", "chevron.left.forwardslash.chevron.right", [
+                home.appendingPathComponent("Library/Application Support/Code/Cache", isDirectory: true),
+                home.appendingPathComponent("Library/Application Support/Code/CachedData", isDirectory: true),
+                home.appendingPathComponent("Library/Application Support/Code/CachedExtensionVSIXs", isDirectory: true),
+                home.appendingPathComponent("Library/Application Support/Code/User/workspaceStorage", isDirectory: true)
+            ]),
+            ("Cursor Cache", "cursorarrow", [
+                home.appendingPathComponent("Library/Application Support/Cursor/Cache", isDirectory: true),
+                home.appendingPathComponent("Library/Application Support/Cursor/CachedData", isDirectory: true),
+                home.appendingPathComponent("Library/Application Support/Cursor/User/workspaceStorage", isDirectory: true)
+            ]),
+            ("JetBrains Cache", "gearshape.2.fill", [
+                home.appendingPathComponent("Library/Caches/JetBrains", isDirectory: true),
+                home.appendingPathComponent("Library/Application Support/JetBrains", isDirectory: true)
+            ]),
+            ("Zed Cache", "bolt.fill", [
+                home.appendingPathComponent("Library/Application Support/Zed/db", isDirectory: true),
+                home.appendingPathComponent("Library/Caches/Zed", isDirectory: true)
+            ]),
+
+            // Go
+            ("Go Module Cache", "arrow.right.circle.fill", [
+                home.appendingPathComponent("go/pkg/mod/cache", isDirectory: true),
+                home.appendingPathComponent(".cache/go-build", isDirectory: true)
+            ]),
+
+            // Java
+            ("Maven Cache", "cup.and.saucer.fill", [
+                home.appendingPathComponent(".m2/repository", isDirectory: true)
+            ]),
+            ("SBT Cache", "terminal.fill", [
+                home.appendingPathComponent(".sbt", isDirectory: true),
+                home.appendingPathComponent(".ivy2/cache", isDirectory: true)
+            ]),
+
+            // Ruby
+            ("Ruby Gems", "circle.hexagongrid.fill", [
+                home.appendingPathComponent(".gem", isDirectory: true)
+            ]),
+            ("Bundler Cache", "shippingbox.circle.fill", [
+                home.appendingPathComponent(".bundle/cache", isDirectory: true)
+            ]),
+
+            // PHP
+            ("Composer Cache", "globe", [
+                home.appendingPathComponent(".composer/cache", isDirectory: true)
+            ]),
+
+            // Rust
+            ("Cargo Registry", "gearshape.fill", [
+                home.appendingPathComponent(".cargo/registry", isDirectory: true),
+                home.appendingPathComponent(".cargo/git", isDirectory: true)
+            ]),
+
+            // Terraform
+            ("Terraform Cache", "cloud.fill", [
+                home.appendingPathComponent(".terraform.d/plugin-cache", isDirectory: true)
+            ]),
+
+            // CI/CD
+            ("GitHub Actions Cache", "arrow.clockwise.circle.fill", [
+                home.appendingPathComponent(".cache/act", isDirectory: true)
+            ]),
+
+            // Virtualization
+            ("Vagrant Cache", "server.rack", [
+                home.appendingPathComponent(".vagrant.d/boxes", isDirectory: true),
+                home.appendingPathComponent(".vagrant.d/tmp", isDirectory: true)
+            ]),
+
+            // Shell
+            ("Zsh Cache", "terminal", [
+                home.appendingPathComponent(".zsh_sessions", isDirectory: true),
+                home.appendingPathComponent(".zcompdump", isDirectory: false)
+            ]),
+
+            // Electron apps
+            ("Electron App Caches", "app.badge", [
+                home.appendingPathComponent("Library/Application Support/Slack/Cache", isDirectory: true),
+                home.appendingPathComponent("Library/Application Support/Slack/Code Cache", isDirectory: true),
+                home.appendingPathComponent("Library/Application Support/discord/Cache", isDirectory: true),
+                home.appendingPathComponent("Library/Application Support/discord/Code Cache", isDirectory: true),
+                home.appendingPathComponent("Library/Application Support/Notion/Cache", isDirectory: true),
+                home.appendingPathComponent("Library/Application Support/Figma/Cache", isDirectory: true)
+            ]),
+
+            // Playwright
+            ("Playwright Browsers", "theatermasks.fill", [
+                home.appendingPathComponent("Library/Caches/ms-playwright", isDirectory: true),
+                home.appendingPathComponent(".cache/ms-playwright", isDirectory: true)
+            ])
         ]
 
         return mapped.map { entry -> DevTool in
+            let label = entry.0
             let existing = entry.2.filter { FileManager.default.fileExists(atPath: $0.path) }
-            let size = existing.reduce(Int64(0)) { $0 + FolderSizing.directoryByteSize(at: $1) }
+
+            let size: Int64
+            if label == "Docker Desktop" {
+                size = dockerDiskUsageBytes()
+            } else {
+                size = existing.reduce(Int64(0)) { $0 + FolderSizing.directoryByteSize(at: $1) }
+            }
+
             return DevTool(
-                toolName: entry.0,
+                toolName: label,
                 iconName: entry.1,
                 paths: entry.2,
                 sizeBytes: size,
                 isSelected: false,
                 isDetected: !existing.isEmpty,
-                safetyInfo: safetyInfo(forToolLabel: entry.0, primaryPath: entry.2.first)
+                safetyInfo: safetyInfo(forToolLabel: label, primaryPath: entry.2.first)
             )
         }
     }

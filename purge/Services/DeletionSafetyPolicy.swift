@@ -87,7 +87,39 @@ enum DeletionSafetyPolicy {
             "\(home)/.pnpm-store",
             "\(home)/.gradle/caches",
             "\(home)/.cargo/registry",
-            "\(home)/.pub-cache"
+            "\(home)/.pub-cache",
+            "\(home)/Library/Application Support/MobileSync/Backup",
+            "\(home)/Library/Logs",
+            "\(home)/.m2/repository",
+            "\(home)/.gem",
+            "\(home)/.bundle/cache",
+            "\(home)/.composer/cache",
+            "\(home)/.cargo/git",
+            "\(home)/.terraform.d/plugin-cache",
+            "\(home)/.vagrant.d/tmp",
+            "\(home)/.cache/go-build",
+            "\(home)/go/pkg/mod/cache",
+            "\(home)/Library/Application Support/Code/Cache",
+            "\(home)/Library/Application Support/Code/CachedData",
+            "\(home)/Library/Application Support/Code/CachedExtensionVSIXs",
+            "\(home)/Library/Application Support/Code/User/workspaceStorage",
+            "\(home)/Library/Application Support/Cursor/Cache",
+            "\(home)/Library/Application Support/Cursor/CachedData",
+            "\(home)/Library/Application Support/Cursor/User/workspaceStorage",
+            "\(home)/Library/Caches/JetBrains",
+            "\(home)/Library/Application Support/JetBrains",
+            "\(home)/Library/Application Support/Zed/db",
+            "\(home)/Library/Caches/Zed",
+            "\(home)/Library/Caches/ms-playwright",
+            "\(home)/.cache/ms-playwright",
+            "\(home)/Library/Developer/CoreSimulator/Devices",
+            "\(home)/Library/Application Support/Slack/Cache",
+            "\(home)/Library/Application Support/Slack/Code Cache",
+            "\(home)/Library/Application Support/discord/Cache",
+            "\(home)/Library/Application Support/discord/Code Cache",
+            "\(home)/Library/Application Support/Notion/Cache",
+            "\(home)/Library/Application Support/Figma/Cache",
+            "\(home)/.vagrant.d/boxes"
         ]
     }
 
@@ -97,6 +129,12 @@ enum DeletionSafetyPolicy {
         let homeURL = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
         let home = homeURL.path
 
+        for allowed in whitelistedAbsolutePrefixes(home: home) {
+            if path == allowed || path.hasPrefix(allowed + "/") {
+                return .allow
+            }
+        }
+
         for blocked in neverDeletePrefixes(home: home) {
             if path == blocked || path.hasPrefix(blocked + "/") {
                 return .blockedNeverDelete
@@ -105,12 +143,6 @@ enum DeletionSafetyPolicy {
 
         if neverDeleteExactPaths(home: home).contains(path) {
             return .blockedNeverDelete
-        }
-
-        for allowed in whitelistedAbsolutePrefixes(home: home) {
-            if path == allowed || path.hasPrefix(allowed + "/") {
-                return .allow
-            }
         }
 
         let inHome = path == home || path.hasPrefix(home + "/")

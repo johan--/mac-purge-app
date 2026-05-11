@@ -447,10 +447,19 @@ final class PurgeStore: ObservableObject {
         let isFirstAIScan = !defaults.bool(forKey: StorageKeys.hasCompletedFirstAIScan)
         isScanningGeneral = true
         errorMessage = nil
-        let items = await cacheScanner.scanCaches()
+        let scannedCaches = await cacheScanner.scanCaches()
+        let junkItems = await cacheScanner.scanSystemJunk()
+        var allItems = scannedCaches + junkItems
+        var seenPaths = Set<String>()
+        allItems = allItems.filter { item in
+            let path = item.path.standardizedFileURL.path
+            guard !seenPaths.contains(path) else { return false }
+            seenPaths.insert(path)
+            return true
+        }
         await gitChecker.clearSessionCache()
         withAnimation(.easeInOut(duration: 0.2)) {
-            cacheItems = items
+            cacheItems = allItems.sorted { $0.sizeBytes > $1.sizeBytes }
         }
         isScanningGeneral = false
         await hydrateCacheSafetyMetadataParallel()
@@ -1255,7 +1264,25 @@ final class PurgeStore: ObservableObject {
             "npm Cache": "npm",
             "pnpm Store": "pnpm",
             "Yarn Cache": "yarn",
-            "CocoaPods": "cocoapods"
+            "CocoaPods": "cocoapods",
+            "Git Worktrees": "gitworktrees",
+            "VS Code Cache": "vscode",
+            "Cursor Cache": "cursor",
+            "JetBrains Cache": "jetbrains",
+            "Zed Cache": "zed",
+            "Go Module Cache": "go",
+            "Maven Cache": "maven",
+            "SBT Cache": "sbt",
+            "Ruby Gems": "rubygems",
+            "Bundler Cache": "bundler",
+            "Composer Cache": "composer",
+            "Cargo Registry": "cargo",
+            "Terraform Cache": "terraform",
+            "GitHub Actions Cache": "githubactions",
+            "Vagrant Cache": "vagrant",
+            "Zsh Cache": "zsh",
+            "Electron App Caches": "electron",
+            "Playwright Browsers": "playwright"
         ]
         return map[toolLabel] ?? toolLabel
     }
