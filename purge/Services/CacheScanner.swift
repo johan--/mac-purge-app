@@ -95,14 +95,6 @@ final class CacheScanner {
                 URL(fileURLWithPath: "/Applications/Install macOS", isDirectory: true)
             ),
             (
-                "iOS Simulators",
-                "ipad.and.iphone",
-                home.appendingPathComponent(
-                    "Library/Developer/CoreSimulator/Devices",
-                    isDirectory: true
-                )
-            ),
-            (
                 "Font Cache",
                 "textformat",
                 home.appendingPathComponent("Library/Caches/com.apple.ATS", isDirectory: true)

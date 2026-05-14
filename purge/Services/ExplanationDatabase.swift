@@ -25,23 +25,84 @@ struct BundledExplanationRecord: Codable, Sendable {
     }
 }
 
+/// Intermediate type for decoding the JSON array format used by `explanations.json`.
+private struct BundledArrayEntry: Codable {
+    let key: String
+    let displayName: String
+    let tag: String
+    let explanation: String
+    let bundleIds: [String]?
+    let aliases: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case key
+        case displayName = "display_name"
+        case tag
+        case explanation
+        case bundleIds = "bundle_ids"
+        case aliases
+    }
+
+    var record: BundledExplanationRecord {
+        BundledExplanationRecord(
+            displayName: displayName,
+            tag: tag,
+            explanation: explanation,
+            bundleIds: bundleIds
+        )
+    }
+}
+
 /// Loads and matches against explicit entries in the local explanation database.
 enum ExplanationDatabase {
     private nonisolated(unsafe) static var cachedRecords: [String: BundledExplanationRecord]?
     private nonisolated(unsafe) static var cachedBundleIndex: [String: BundledExplanationRecord]?
+    private nonisolated(unsafe) static var cachedAliasIndex: [String: BundledExplanationRecord]?
 
     private nonisolated static func loadFromBundle() -> [String: BundledExplanationRecord] {
         if let cachedRecords { return cachedRecords }
         guard let url = Bundle.main.url(forResource: "explanations", withExtension: "json"),
-              let data = try? Data(contentsOf: url),
-              let decoded = try? JSONDecoder().decode([String: BundledExplanationRecord].self, from: data)
+              let data = try? Data(contentsOf: url)
         else {
             cachedRecords = [:]
             cachedBundleIndex = [:]
+            cachedAliasIndex = [:]
             return [:]
         }
-        cachedRecords = decoded
-        return decoded
+
+        if let array = try? JSONDecoder().decode([BundledArrayEntry].self, from: data) {
+            var dict: [String: BundledExplanationRecord] = [:]
+            var aliasIndex: [String: BundledExplanationRecord] = [:]
+            for entry in array {
+                let rec = entry.record
+                dict[entry.key] = rec
+                if let aliases = entry.aliases {
+                    for alias in aliases {
+                        aliasIndex[alias.lowercased()] = rec
+                    }
+                }
+            }
+            cachedRecords = dict
+            cachedAliasIndex = aliasIndex
+            return dict
+        }
+
+        if let decoded = try? JSONDecoder().decode([String: BundledExplanationRecord].self, from: data) {
+            cachedRecords = decoded
+            cachedAliasIndex = [:]
+            return decoded
+        }
+
+        cachedRecords = [:]
+        cachedBundleIndex = [:]
+        cachedAliasIndex = [:]
+        return [:]
+    }
+
+    private nonisolated static func aliasIndex() -> [String: BundledExplanationRecord] {
+        if let cachedAliasIndex { return cachedAliasIndex }
+        _ = loadFromBundle()
+        return cachedAliasIndex ?? [:]
     }
 
     private nonisolated static func bundleIdIndex() -> [String: BundledExplanationRecord] {
@@ -58,16 +119,16 @@ enum ExplanationDatabase {
         return index
     }
 
-    /// Exact keys and explicit bundle IDs only. All matching is case-insensitive.
+    /// Keys, aliases, and bundle IDs. All matching is case-insensitive.
     nonisolated static func matchBundledDatabase(folderName: String) -> BundledExplanationRecord? {
         let lower = folderName.lowercased()
         let dict = loadFromBundle()
 
-        func record(forKey keyLower: String) -> BundledExplanationRecord? {
-            dict.first { $0.key.lowercased() == keyLower }?.value
+        if let record = dict.first(where: { $0.key.lowercased() == lower })?.value {
+            return record
         }
 
-        if let record = record(forKey: lower) {
+        if let record = aliasIndex()[lower] {
             return record
         }
 

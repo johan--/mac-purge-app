@@ -3,18 +3,10 @@ import Foundation
 import SwiftUI
 import Combine
 
-extension Notification.Name {
-    /// Posted from `SettingsView` immediately after a new OpenRouter API key is
-    /// saved successfully. Triggers the one-time "AI is now identifying your
-    /// unknown folders" banner in `AppCachesView` / `DevToolsView`.
-    static let apiKeyAdded = Notification.Name("APIKeyAdded")
-}
-
 @MainActor
 final class PurgeStore: ObservableObject {
     private enum StorageKeys {
         static let totalRecoveredBytes = "totalRecoveredBytes"
-        static let hasCompletedFirstAIScan = "hasCompletedFirstAIScan"
     }
 
     enum Tab: String, CaseIterable, Identifiable {
@@ -70,6 +62,7 @@ final class PurgeStore: ObservableObject {
     @Published var selectedTab: Tab = .appCaches
     @Published var cacheItems: [CacheItem] = []
     @Published var devTools: [DevTool] = []
+    @Published var simulatorDevices: [SimulatorDevice] = []
     @Published var projectGroups: [ProjectGroup] = []
     /// Best-effort git status keyed by standardized tool path (`URL.path`).
     @Published private(set) var devToolRepoStatusByPath: [String: GitWorktreeStatus] = [:]
@@ -84,13 +77,6 @@ final class PurgeStore: ObservableObject {
     @Published var lastDeletionReport: DeletionReport?
     @Published var hasFullDiskAccess = PermissionChecker().hasFullDiskAccess()
     @Published var totalRecoveredBytes: Int64 = 0
-    @Published var firstAIScanCompletionBannerID: UUID?
-
-    /// Drives the post-API-key "AI is now identifying your unknown folders" banner.
-    /// `total` is captured once when reidentification starts; `resolved` increments per row.
-    @Published private(set) var unknownReidentifyTotal: Int = 0
-    @Published private(set) var unknownReidentifyResolved: Int = 0
-    @Published private(set) var isReidentifyingUnknownItems: Bool = false
 
     @Published var showMissingLockfileFriction = false
     @Published var showUncommittedGitFriction = false
@@ -106,6 +92,9 @@ final class PurgeStore: ObservableObject {
     private let defaults = UserDefaults.standard
     private let gitChecker = GitStatusChecker()
 
+    /// Cancels stale async simulator sizing when a new dev scan starts.
+    private var simulatorSizingGeneration = 0
+
     /// After the primary confirm sheet runs, extra warnings may enqueue here.
     private var stagedDeletionCandidates: [DeletionCandidate]?
     private var stagedDeletionTrigger: CleanupTrigger = .manual
@@ -119,32 +108,29 @@ final class PurgeStore: ObservableObject {
     var selectedTotalBytes: Int64 {
         let selectedCaches = cacheItems.filter(\.isSelected).reduce(Int64(0)) { $0 + $1.sizeBytes }
         let selectedTools = devTools.filter(\.isSelected).reduce(Int64(0)) { $0 + $1.sizeBytes }
+        let simSelected = simulatorDevices.filter(\.isSelected).reduce(Int64(0)) { $0 + ($1.sizeOnDisk ?? 0) }
         let projectSelected = projectGroups.flatMap(\.artifacts).filter(\.isSelected).reduce(Int64(0)) { $0 + $1.sizeBytes }
-        return selectedCaches + selectedTools + projectSelected
+        return selectedCaches + selectedTools + simSelected + projectSelected
     }
 
     var recoverableTotalBytes: Int64 {
         let cacheTotal = cacheItems.reduce(Int64(0)) { $0 + $1.sizeBytes }
         let toolsTotal = devTools.reduce(Int64(0)) { $0 + $1.sizeBytes }
+        let simTotal = simulatorDevices.reduce(Int64(0)) { $0 + ($1.sizeOnDisk ?? 0) }
         let projTotal = projectGroups.reduce(Int64(0)) { $0 + $1.totalBytes }
-        return cacheTotal + toolsTotal + projTotal
+        return cacheTotal + toolsTotal + simTotal + projTotal
     }
 
     var selectedCount: Int {
         let selectedCaches = cacheItems.filter(\.isSelected).count
         let selectedTools = devTools.filter(\.isSelected).count
+        let selectedSims = simulatorDevices.filter(\.isSelected).count
         let selectedProjects = projectGroups.flatMap(\.artifacts).filter(\.isSelected).count
-        return selectedCaches + selectedTools + selectedProjects
+        return selectedCaches + selectedTools + selectedSims + selectedProjects
     }
 
-    /// Manual clean can include any classification once the user confirms; excludes rows still awaiting AI.
     private func isManualDeletionCandidateEligible(_ safetyInfo: SafetyInfo) -> Bool {
-        switch safetyInfo.level {
-        case .safe, .medium, .danger:
-            return true
-        case .unknown:
-            return !ExplanationResolver.isAwaitingAI(safetyInfo)
-        }
+        true
     }
 
     /// Selected caches eligible for manual delete (includes Do Not Delete / Not Sure when selected).
@@ -164,11 +150,15 @@ final class PurgeStore: ObservableObject {
             }
             .filter { isManualDeletionCandidateEligible($0.safetyInfo) }
 
+        let sims = simulatorDevices.filter(\.isSelected)
+            .map(simulatorDeletionCandidate)
+            .filter { isManualDeletionCandidateEligible($0.safetyInfo) }
+
         let artifacts = projectGroups.flatMap(\.artifacts)
             .filter { $0.isSelected && isManualDeletionCandidateEligible($0.safetyInfo) }
             .map(artifactDeletionCandidate)
 
-        let merged = tools + artifacts
+        let merged = tools + sims + artifacts
         let unique = Dictionary(grouping: merged, by: { $0.path }).compactMap { $0.value.first }
         return unique.sorted { $0.sizeBytes > $1.sizeBytes }
     }
@@ -181,11 +171,15 @@ final class PurgeStore: ObservableObject {
             .flatMap { tool in tool.paths.map { devToolDeletionCandidate(tool, path: $0) } }
             .filter { isManualDeletionCandidateEligible($0.safetyInfo) }
 
+        let sims = simulatorDevices.filter(\.isSelected)
+            .map(simulatorDeletionCandidate)
+            .filter { isManualDeletionCandidateEligible($0.safetyInfo) }
+
         let artifacts = projectGroups.flatMap(\.artifacts)
             .filter { $0.isSelected && isManualDeletionCandidateEligible($0.safetyInfo) }
             .map(artifactDeletionCandidate)
 
-        let unique = Dictionary(grouping: caches + tools + artifacts, by: { $0.path }).compactMap { $0.value.first }
+        let unique = Dictionary(grouping: caches + tools + sims + artifacts, by: { $0.path }).compactMap { $0.value.first }
         return unique.sorted { $0.sizeBytes > $1.sizeBytes }
     }
 
@@ -340,6 +334,8 @@ final class PurgeStore: ObservableObject {
                 )
             }
 
+            simulatorDevices.removeAll { deletedPaths.contains($0.folderURL.standardizedFileURL.path) }
+
             var groups = projectGroups
             for gi in groups.indices {
                 groups[gi].artifacts.removeAll { deletedPaths.contains($0.path.standardizedFileURL.path) }
@@ -360,6 +356,10 @@ final class PurgeStore: ObservableObject {
 
             for index in devTools.indices {
                 devTools[index].isSelected = false
+            }
+
+            for index in simulatorDevices.indices {
+                simulatorDevices[index].isSelected = false
             }
 
             var groupsCopy = projectGroups
@@ -387,6 +387,12 @@ final class PurgeStore: ObservableObject {
             let toolPaths = devTools[index].paths.map { $0.standardizedFileURL.path }
             if toolPaths.contains(where: { skippedPaths.contains($0) }) {
                 devTools[index].isSelected = false
+            }
+        }
+
+        for index in simulatorDevices.indices {
+            if skippedPaths.contains(simulatorDevices[index].folderURL.standardizedFileURL.path) {
+                simulatorDevices[index].isSelected = false
             }
         }
 
@@ -444,7 +450,6 @@ final class PurgeStore: ObservableObject {
     }
 
     func scanGeneral() async {
-        let isFirstAIScan = !defaults.bool(forKey: StorageKeys.hasCompletedFirstAIScan)
         isScanningGeneral = true
         errorMessage = nil
         let scannedCaches = await cacheScanner.scanCaches()
@@ -463,40 +468,31 @@ final class PurgeStore: ObservableObject {
         }
         isScanningGeneral = false
         await hydrateCacheSafetyMetadataParallel()
-
-        let pendingFolderNames = Set(cacheItems.filter { ExplanationResolver.isAwaitingAI($0.safetyInfo) }.map(\.bundleID))
-        guard !pendingFolderNames.isEmpty else {
-            markFirstAIScanCompleteIfNeeded(showCompletionBanner: false)
-            return
-        }
-
-        for folderName in pendingFolderNames.sorted() {
-            let friendlyHeadline = cacheItems.first { $0.bundleID == folderName }?.appName ?? folderName
-            let resolved = await ExplanationResolver.resolveWithAIIfNeeded(
-                folderName: folderName,
-                friendlyHeadline: friendlyHeadline
-            )
-            withAnimation(.easeInOut(duration: 0.2)) {
-                for index in cacheItems.indices where cacheItems[index].bundleID == folderName {
-                    cacheItems[index].safetyInfo = resolved
-                    cacheItems[index].appName = resolved.headline
-                }
-            }
-        }
-
-        markFirstAIScanCompleteIfNeeded(showCompletionBanner: isFirstAIScan)
     }
 
     func scanDeveloper() async {
         isScanningDeveloper = true
         errorMessage = nil
+        simulatorSizingGeneration += 1
+        let sizingGeneration = simulatorSizingGeneration
         let outcome = await devScanner.scanDevTools()
+        let unsizedSimulators = outcome.simulators
         await gitChecker.clearSessionCache()
         withAnimation(.easeInOut(duration: 0.2)) {
             devTools = outcome.tools
             projectGroups = outcome.projects
+            simulatorDevices = unsizedSimulators
         }
         isScanningDeveloper = false
+        if !unsizedSimulators.isEmpty {
+            Task { @MainActor in
+                let sized = await devScanner.measureSimulatorFolderSizes(unsizedSimulators)
+                guard sizingGeneration == self.simulatorSizingGeneration else { return }
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    self.simulatorDevices = sized
+                }
+            }
+        }
         await hydrateDeveloperGitStatusesParallel()
         await hydrateDeveloperToolRepoStatusesParallel()
     }
@@ -504,104 +500,6 @@ final class PurgeStore: ObservableObject {
     func scanAll() async {
         await scanGeneral()
         await scanDeveloper()
-    }
-
-    // MARK: - Re-identify unknown items after a new API key is added
-
-    /// Sweep every row that previously resolved as `.unknown` (no API key, AI
-    /// failed, or simply not in the bundled DB / tier list) and ask the model
-    /// for a verdict now that a key is available. Each row updates in place as
-    /// soon as its result comes back so progress reflects in the UI.
-    func reidentifyUnknownItems() async {
-        let unknownCacheItems = cacheItems.filter { $0.safetyInfo.level == .unknown }
-        let unknownArtifacts = projectGroups.flatMap(\.artifacts).filter { $0.safetyInfo.level == .unknown }
-        let unknownTools = devTools.filter { $0.safetyInfo.level == .unknown }
-
-        let total = unknownCacheItems.count + unknownArtifacts.count + unknownTools.count
-        guard total > 0 else { return }
-
-        unknownReidentifyTotal = total
-        unknownReidentifyResolved = 0
-        isReidentifyingUnknownItems = true
-        defer { isReidentifyingUnknownItems = false }
-
-        // Flip every unknown row to the "Checking..." placeholder before kicking
-        // off any network calls so the row tooltip immediately reflects that AI
-        // is identifying it (matches `ExplanationResolver.isAwaitingAI`).
-        let checkingInfo = SafetyInfo(
-            level: .unknown,
-            headline: "Identifying...",
-            explanation: ExplanationResolver.checkingExplanation,
-            recoverySteps: "",
-            reinstallCommand: nil
-        )
-
-        withAnimation(.easeInOut(duration: 0.2)) {
-            for index in cacheItems.indices
-            where cacheItems[index].safetyInfo.level == .unknown {
-                cacheItems[index].safetyInfo = checkingInfo
-                cacheItems[index].appName = "Identifying..."
-            }
-        }
-
-        for gi in projectGroups.indices {
-            for ai in projectGroups[gi].artifacts.indices
-            where projectGroups[gi].artifacts[ai].safetyInfo.level == .unknown {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    projectGroups[gi].artifacts[ai].safetyInfo = checkingInfo
-                }
-            }
-        }
-
-        withAnimation(.easeInOut(duration: 0.2)) {
-            for index in devTools.indices
-            where devTools[index].safetyInfo.level == .unknown {
-                devTools[index].safetyInfo = checkingInfo
-            }
-        }
-
-        for item in unknownCacheItems {
-            let resolved = await ExplanationResolver.resolveWithAIIfNeeded(
-                folderName: item.bundleID,
-                friendlyHeadline: item.appName
-            )
-            withAnimation(.easeInOut(duration: 0.2)) {
-                for index in cacheItems.indices where cacheItems[index].bundleID == item.bundleID {
-                    cacheItems[index].safetyInfo = resolved
-                    cacheItems[index].appName = resolved.headline
-                }
-            }
-            unknownReidentifyResolved += 1
-        }
-
-        for artifact in unknownArtifacts {
-            let resolved = await ExplanationResolver.resolveWithAIIfNeeded(
-                folderName: artifact.kind.explanationKey,
-                friendlyHeadline: artifact.safetyInfo.headline
-            )
-            withAnimation(.easeInOut(duration: 0.2)) {
-                for gi in projectGroups.indices {
-                    for ai in projectGroups[gi].artifacts.indices
-                    where projectGroups[gi].artifacts[ai].path == artifact.path {
-                        projectGroups[gi].artifacts[ai].safetyInfo = resolved
-                    }
-                }
-            }
-            unknownReidentifyResolved += 1
-        }
-
-        for tool in unknownTools {
-            let resolved = await ExplanationResolver.resolveWithAIIfNeeded(
-                folderName: tool.toolName,
-                friendlyHeadline: tool.toolName
-            )
-            withAnimation(.easeInOut(duration: 0.2)) {
-                for index in devTools.indices where devTools[index].toolName == tool.toolName {
-                    devTools[index].safetyInfo = resolved
-                }
-            }
-            unknownReidentifyResolved += 1
-        }
     }
 
     // MARK: - Scheduled cleaning
@@ -813,6 +711,9 @@ final class PurgeStore: ObservableObject {
                 return tool.safetyInfo.headline
             }
         }
+        if let sim = simulatorDevices.first(where: { $0.folderURL.standardizedFileURL.path == standardizedPath }) {
+            return sim.safetyInfo.headline
+        }
         if let artifact = projectGroups.flatMap(\.artifacts).first(where: { $0.path.standardizedFileURL.path == standardizedPath }) {
             return artifact.safetyInfo.headline
         }
@@ -831,6 +732,21 @@ final class PurgeStore: ObservableObject {
             subtitle: nil,
             reinstallSafety: ReinstallSafetyEvaluator.evaluateByFolderNameDeleting(path: path),
             gitStatus: devToolRepoStatusByPath[key] ?? .unknown
+        )
+    }
+
+    private func simulatorDeletionCandidate(_ device: SimulatorDevice) -> DeletionCandidate {
+        let path = device.folderURL.standardizedFileURL
+        let bytes = device.sizeOnDisk ?? cacheScanner.calculateFolderSize(at: path)
+        return DeletionCandidate(
+            title: device.safetyInfo.headline,
+            path: path,
+            sizeBytes: bytes,
+            safetyInfo: device.safetyInfo,
+            reinstallCommand: nil,
+            subtitle: nil,
+            reinstallSafety: .notApplicable,
+            gitStatus: .clean
         )
     }
 
@@ -859,14 +775,6 @@ final class PurgeStore: ObservableObject {
         defaults.set(totalRecoveredBytes, forKey: StorageKeys.totalRecoveredBytes)
     }
 
-    private func markFirstAIScanCompleteIfNeeded(showCompletionBanner: Bool) {
-        guard !defaults.bool(forKey: StorageKeys.hasCompletedFirstAIScan) else { return }
-        defaults.set(true, forKey: StorageKeys.hasCompletedFirstAIScan)
-        if showCompletionBanner {
-            firstAIScanCompletionBannerID = UUID()
-        }
-    }
-
     // MARK: - Project row selection bindings
 
     func setProjectArtifactSelected(groupIndex: Int, artifactIndex: Int, isSelected: Bool) {
@@ -875,6 +783,21 @@ final class PurgeStore: ObservableObject {
         var copy = projectGroups
         copy[groupIndex].artifacts[artifactIndex].isSelected = isSelected
         projectGroups = copy
+    }
+
+    func setSimulatorDeviceSelected(id: UUID, isSelected: Bool) {
+        guard let index = simulatorDevices.firstIndex(where: { $0.id == id }) else { return }
+        var copy = simulatorDevices
+        copy[index].isSelected = isSelected
+        simulatorDevices = copy
+    }
+
+    func setSimulatorGroupNonDangerSelection(allSelected: Bool) {
+        var copy = simulatorDevices
+        for index in copy.indices where copy[index].safetyInfo.level != .danger {
+            copy[index].isSelected = allSelected
+        }
+        simulatorDevices = copy
     }
 
     func setEligibleArtifactsInProjectSelected(groupIndex: Int, isSelected: Bool) {
@@ -973,7 +896,6 @@ final class PurgeStore: ObservableObject {
     }
 
     /// Remove a single override and re-resolve the row using the automatic chain.
-    /// If automatic resolution lands on the AI placeholder, kick a fresh AI call.
     func resetCacheItemToAutomatic(id: UUID) {
         guard let index = cacheItems.firstIndex(where: { $0.id == id }) else { return }
         let item = cacheItems[index]
@@ -988,17 +910,6 @@ final class PurgeStore: ObservableObject {
         withAnimation {
             cacheItems[index].safetyInfo = resolved
             cacheItems[index].appName = resolved.headline
-        }
-
-        if ExplanationResolver.isAwaitingAI(resolved) {
-            Task { [weak self, bundleID = item.bundleID, itemID = item.id, headline = resolved.headline, path = item.path] in
-                let final = await ExplanationResolver.resolveWithAIIfNeeded(
-                    folderName: bundleID,
-                    friendlyHeadline: headline,
-                    path: path
-                )
-                await self?.applyResolvedSafety(forCacheItemID: itemID, resolved: final)
-            }
         }
     }
 
@@ -1042,36 +953,23 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    /// Force a fresh remote categorization for a single cache row. Removes the
-    /// cached AI entry, displays `Identifying...`, then patches the row when
-    /// the model returns.
+    /// Re-resolve a single cache row using the local chain only.
     func recategorizeCacheItem(id: UUID) {
         guard let index = cacheItems.firstIndex(where: { $0.id == id }) else { return }
         let item = cacheItems[index]
 
         UserOverridesStore.remove(path: item.path)
-        AICacheStore.remove(folderName: item.bundleID)
         refreshUserOverridePaths()
 
-        let placeholder = SafetyInfo(
-            level: .unknown,
-            headline: item.appName,
-            explanation: ExplanationResolver.checkingExplanation,
-            recoverySteps: "",
-            reinstallCommand: item.safetyInfo.reinstallCommand
+        let resolved = ExplanationResolver.initialSafetyForCacheFolder(
+            folderName: item.bundleID,
+            friendlyHeadline: appNameFromBundleIDForReset(item.bundleID) ?? item.appName,
+            path: item.path
         )
         withAnimation {
-            cacheItems[index].safetyInfo = placeholder
+            cacheItems[index].safetyInfo = resolved
+            cacheItems[index].appName = resolved.headline
             cacheItems[index].isSelected = false
-        }
-
-        Task { [weak self, bundleID = item.bundleID, itemID = item.id, headline = item.appName, path = item.path] in
-            let final = await ExplanationResolver.recategorizeWithAI(
-                folderName: bundleID,
-                friendlyHeadline: headline,
-                path: path
-            )
-            await self?.applyResolvedSafety(forCacheItemID: itemID, resolved: final)
         }
     }
 
@@ -1081,29 +979,19 @@ final class PurgeStore: ObservableObject {
         guard let primary = tool.primaryOverridePath else { return }
 
         UserOverridesStore.remove(path: primary)
-        let folderName = primary.lastPathComponent
-        AICacheStore.remove(folderName: folderName)
         refreshUserOverridePaths()
 
-        let placeholder = SafetyInfo(
-            level: .unknown,
-            headline: tool.safetyInfo.headline,
-            explanation: ExplanationResolver.checkingExplanation,
-            recoverySteps: "",
-            reinstallCommand: tool.safetyInfo.reinstallCommand
+        let label = tool.toolName
+        let key = devToolExplanationKey(forToolLabel: label)
+        let info = SafetyInfo.fromExplanationDatabase(
+            key: key,
+            friendlyFallback: label,
+            reinstallCommand: tool.safetyInfo.reinstallCommand,
+            path: primary
         )
         withAnimation {
-            devTools[index].safetyInfo = placeholder
+            devTools[index].safetyInfo = info
             devTools[index].isSelected = false
-        }
-
-        Task { [weak self, toolID = tool.id, headline = tool.safetyInfo.headline, path = primary] in
-            let final = await ExplanationResolver.recategorizeWithAI(
-                folderName: folderName,
-                friendlyHeadline: headline,
-                path: path
-            )
-            await self?.applyResolvedSafety(forDevToolID: toolID, resolved: final)
         }
     }
 
@@ -1113,33 +1001,19 @@ final class PurgeStore: ObservableObject {
         let artifact = projectGroups[groupIndex].artifacts[artifactIndex]
 
         UserOverridesStore.remove(path: artifact.path)
-        let folderName = artifact.path.lastPathComponent
-        AICacheStore.remove(folderName: folderName)
         refreshUserOverridePaths()
 
-        let placeholder = SafetyInfo(
-            level: .unknown,
-            headline: artifact.safetyInfo.headline,
-            explanation: ExplanationResolver.checkingExplanation,
-            recoverySteps: "",
-            reinstallCommand: artifact.safetyInfo.reinstallCommand
+        let info = SafetyInfo.fromExplanationDatabase(
+            key: artifact.kind.explanationKey,
+            friendlyFallback: artifact.kind.rowTag,
+            reinstallCommand: artifact.safetyInfo.reinstallCommand,
+            path: artifact.path
         )
         var groups = projectGroups
-        groups[groupIndex].artifacts[artifactIndex].safetyInfo = placeholder
+        groups[groupIndex].artifacts[artifactIndex].safetyInfo = info
         groups[groupIndex].artifacts[artifactIndex].isSelected = false
         withAnimation {
             projectGroups = groups
-        }
-
-        let artifactPath = artifact.path
-        let headline = artifact.safetyInfo.headline
-        Task { [weak self, gi = groupIndex, ai = artifactIndex] in
-            let final = await ExplanationResolver.recategorizeWithAI(
-                folderName: folderName,
-                friendlyHeadline: headline,
-                path: artifactPath
-            )
-            await self?.applyResolvedSafety(forArtifactAtGroup: gi, artifactIndex: ai, expectedPath: artifactPath, resolved: final)
         }
     }
 
@@ -1218,32 +1092,6 @@ final class PurgeStore: ObservableObject {
     /// Public read of the override entry for a given path so views can show the badge.
     func userOverride(forPath path: URL) -> UserOverrideEntry? {
         UserOverridesStore.read(path: path)
-    }
-
-    private func applyResolvedSafety(forCacheItemID id: UUID, resolved: SafetyInfo) {
-        guard let index = cacheItems.firstIndex(where: { $0.id == id }) else { return }
-        withAnimation {
-            cacheItems[index].safetyInfo = resolved
-            cacheItems[index].appName = resolved.headline
-        }
-    }
-
-    private func applyResolvedSafety(forDevToolID id: UUID, resolved: SafetyInfo) {
-        guard let index = devTools.firstIndex(where: { $0.id == id }) else { return }
-        withAnimation {
-            devTools[index].safetyInfo = resolved
-        }
-    }
-
-    private func applyResolvedSafety(forArtifactAtGroup gi: Int, artifactIndex ai: Int, expectedPath: URL, resolved: SafetyInfo) {
-        guard projectGroups.indices.contains(gi),
-              projectGroups[gi].artifacts.indices.contains(ai),
-              projectGroups[gi].artifacts[ai].path == expectedPath else { return }
-        var groups = projectGroups
-        groups[gi].artifacts[ai].safetyInfo = resolved
-        withAnimation {
-            projectGroups = groups
-        }
     }
 
     private func appNameFromBundleIDForReset(_ bundleID: String) -> String? {

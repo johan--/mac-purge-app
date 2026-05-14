@@ -23,51 +23,35 @@ struct ScanResultRow: View {
     let onMarkDanger: (() -> Void)?
     let onResetToAutomatic: (() -> Void)?
     let isUserOverride: Bool
+    /// When `false`, the row checkbox is disabled (e.g. high-risk items that should not participate in bulk select).
+    var allowsBulkSelection: Bool = true
 
     @State private var isHoveringRow = false
     @State private var showSafetyPopover = false
     @State private var hoverPopoverWorkItem: DispatchWorkItem?
 
-    private var isAwaitingAI: Bool {
-        safetyInfo.explanation == ExplanationResolver.checkingExplanation
-    }
-
     private var statusLabel: String {
-        isAwaitingAI ? "🔍 Identifying..." : safetyInfo.level.displayName
+        safetyInfo.level.displayName
     }
 
     private var statusColor: Color {
-        isAwaitingAI ? Color.secondary : safetyInfo.level.color
+        safetyInfo.level.color
     }
 
     private var popoverStatusColor: Color {
-        isAwaitingAI ? Color.accentColor : statusColor
+        statusColor
     }
 
     private var popoverExplanation: String {
-        if isAwaitingAI {
-            return """
-            Purge is asking AI to identify this folder.
-            This only happens once and the result is saved permanently.
-            """
-        }
-
-        return safetyInfo.explanation
+        safetyInfo.explanation
     }
 
-    /// Unknown rows may still be deleted deliberately; affordance lives in the popover and context menu (not a separate left column).
     private var offersUnknownDeletion: Bool {
-        safetyInfo.level == .unknown && !isAwaitingAI && onRequestUnknownDelete != nil
+        safetyInfo.level == .unknown && onRequestUnknownDelete != nil
     }
 
-    /// Rows that can toggle selection (checkbox enabled + main row/icon acts as toggle). Unknown is allowed once classification finishes; Do Not Delete can be selected for deliberate cleanup with extra confirmations.
     private var canSelectForBulk: Bool {
-        switch safetyInfo.level {
-        case .safe, .medium, .danger:
-            return true
-        case .unknown:
-            return !isAwaitingAI
-        }
+        allowsBulkSelection
     }
 
     private var resolvedIcon: NSImage {
@@ -93,7 +77,8 @@ struct ScanResultRow: View {
         onMarkMedium: (() -> Void)? = nil,
         onMarkDanger: (() -> Void)? = nil,
         onResetToAutomatic: (() -> Void)? = nil,
-        isUserOverride: Bool = false
+        isUserOverride: Bool = false,
+        allowsBulkSelection: Bool = true
     ) {
         self._isSelected = isSelected
         self.primaryLabel = primaryLabel
@@ -111,6 +96,7 @@ struct ScanResultRow: View {
         self.onMarkDanger = onMarkDanger
         self.onResetToAutomatic = onResetToAutomatic
         self.isUserOverride = isUserOverride
+        self.allowsBulkSelection = allowsBulkSelection
     }
 
     var body: some View {
@@ -129,6 +115,7 @@ struct ScanResultRow: View {
             } else {
                 rowMainContent
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .opacity(0.55)
             }
         }
         .contextMenu {
@@ -147,13 +134,13 @@ struct ScanResultRow: View {
 
     @ViewBuilder
     private var rowContextMenu: some View {
-        if let onRecategorize, !isAwaitingAI {
-            Button("This seems wrong — Recategorize") {
+        if let onRecategorize {
+            Button("Recategorize") {
                 onRecategorize()
             }
         }
 
-        if !isAwaitingAI && hasAnyMarkAction {
+        if hasAnyMarkAction {
             Divider()
             if let onMarkSafe, safetyInfo.level != .safe {
                 Button("Mark as Safe to Clean") { onMarkSafe() }
@@ -313,5 +300,6 @@ struct ScanResultRow: View {
         Toggle("", isOn: $isSelected)
             .labelsHidden()
             .disabled(!canSelectForBulk)
+            .opacity(canSelectForBulk ? 1 : 0.45)
     }
 }

@@ -5,10 +5,6 @@ struct OnboardingView: View {
     let onComplete: () -> Void
 
     @State private var currentPage = 0
-    @State private var apiKeyText = ""
-    @State private var apiKeyError: String?
-    @State private var hasStoredAPIKey = false
-    @FocusState private var apiKeyFieldFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,7 +20,6 @@ struct OnboardingView: View {
         .frame(width: 560, height: 420)
         .background(onboardingBackground)
         .foregroundStyle(.primary)
-        .onAppear(perform: refreshAPIKeyState)
     }
 
     @ViewBuilder
@@ -32,10 +27,8 @@ struct OnboardingView: View {
         switch currentPage {
         case 0:
             firstScreen
-        case 1:
-            safetyScreen
         default:
-            apiKeyScreen
+            safetyScreen
         }
     }
 
@@ -100,85 +93,17 @@ struct OnboardingView: View {
         }
     }
 
-    private var apiKeyScreen: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            centeredSymbol("cpu", size: 48)
-                .padding(.bottom, 2)
-
-            Text("Smarter identification with AI")
-                .font(.system(.title2, design: .rounded).weight(.bold))
-
-            Text(
-                """
-                Purge uses OpenRouter to explain unknown cache folders in \
-                plain English. It only calls AI when needed and saves \
-                results permanently so each folder is only looked up once.
-                """
-            )
-            .foregroundStyle(.secondary)
-            .lineSpacing(3)
-            .fixedSize(horizontal: false, vertical: true)
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    apiKeySecureField
-
-                    if hasStoredAPIKey {
-                        keySavedBadge
-                    }
-
-                    Button("Save") {
-                        saveAPIKeyAndComplete()
-                    }
-                    .controlSize(.small)
-                    .disabled(apiKeyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-
-                if let apiKeyError {
-                    Text(apiKeyError)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
-
-                Text("Your key is stored securely in the macOS Keychain.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack {
-                Spacer()
-                Link(destination: openRouterKeysURL) {
-                    HStack(spacing: 3) {
-                        Text("Get Free API Key")
-                        Image(systemName: "arrow.up.right")
-                            .font(.caption2.weight(.semibold))
-                    }
-                }
-                .font(.subheadline)
-                Spacer()
-            }
-            .padding(.top, 2)
-        }
-    }
-
     private var navigationButtons: some View {
         HStack(spacing: 12) {
             Spacer()
 
-            if currentPage == 2 {
-                if hasStoredAPIKey {
-                    Button {
-                        complete()
-                    } label: {
-                        Text("Done →")
-                    }
-                    .buttonStyle(.borderedProminent)
-                } else {
-                    Button("Skip for now") {
-                        complete()
-                    }
-                    .buttonStyle(.plain)
+            if currentPage == 1 {
+                Button {
+                    complete()
+                } label: {
+                    Text("Done →")
                 }
+                .buttonStyle(.borderedProminent)
             } else {
                 Button("Skip") {
                     complete()
@@ -197,34 +122,13 @@ struct OnboardingView: View {
 
     private var progressDots: some View {
         HStack(spacing: 6) {
-            ForEach(0..<3, id: \.self) { index in
+            ForEach(0..<2, id: \.self) { index in
                 Circle()
                     .fill(index == currentPage ? Color.accentColor : Color.primary.opacity(0.2))
                     .frame(width: 8, height: 8)
             }
         }
         .frame(maxWidth: .infinity, alignment: .center)
-    }
-
-    private var apiKeySecureField: some View {
-        SecureField("Paste your API key here", text: $apiKeyText)
-            .textFieldStyle(.roundedBorder)
-            .focused($apiKeyFieldFocused)
-            .onSubmit(saveAPIKeyAndComplete)
-            .onChange(of: apiKeyFieldFocused) { isFocused in
-                if isFocused {
-                    apiKeyError = nil
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var keySavedBadge: some View {
-        Label("Key saved", systemImage: "checkmark.circle.fill")
-            .font(.caption.weight(.medium))
-            .foregroundStyle(.green)
-            .labelStyle(.titleAndIcon)
-            .fixedSize()
     }
 
     private var onboardingBackground: some ShapeStyle {
@@ -236,10 +140,6 @@ struct OnboardingView: View {
             startPoint: .top,
             endPoint: .bottom
         )
-    }
-
-    private var openRouterKeysURL: URL {
-        URL(string: "https://openrouter.ai/settings/keys")!
     }
 
     private func centeredSymbol(_ name: String, size: CGFloat) -> some View {
@@ -272,66 +172,18 @@ struct OnboardingView: View {
     }
 
     private func advance() {
-        if currentPage == 2 {
-            completeFromAPIKeyScreen()
-            return
-        }
-
         if currentPage == 0 {
             hasCompletedOnboarding = true
         }
 
         withAnimation(.easeInOut(duration: 0.18)) {
-            currentPage += 1
+            currentPage = min(currentPage + 1, 1)
         }
-    }
-
-    private func completeFromAPIKeyScreen() {
-        let trimmed = apiKeyText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            guard validateAndSaveAPIKey(trimmed) else { return }
-        }
-
-        complete()
     }
 
     private func complete() {
         hasCompletedOnboarding = true
         onComplete()
-    }
-
-    private func refreshAPIKeyState() {
-        hasStoredAPIKey = KeychainStore.read(key: "openrouter-api-key") != nil
-        apiKeyText = ""
-        apiKeyError = nil
-    }
-
-    private func saveAPIKeyAndComplete() {
-        let trimmed = apiKeyText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-
-        guard validateAndSaveAPIKey(trimmed) else { return }
-        complete()
-    }
-
-    @discardableResult
-    private func validateAndSaveAPIKey(_ trimmed: String) -> Bool {
-        guard OpenRouterExplanationClient.looksLikeAPIKey(trimmed) else {
-            apiKeyError = "This doesn't look like a valid OpenRouter API key"
-            return false
-        }
-
-        do {
-            try KeychainStore.save(key: "openrouter-api-key", value: trimmed)
-            hasStoredAPIKey = true
-            apiKeyText = ""
-            apiKeyError = nil
-            apiKeyFieldFocused = false
-            return true
-        } catch {
-            apiKeyError = "We couldn't save this API key. Please try again."
-            return false
-        }
     }
 }
 

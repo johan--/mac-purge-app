@@ -6,9 +6,7 @@ import SwiftUI
 enum SafetyFilter: String, CaseIterable, Identifiable {
     case all
     case safe
-    case medium
-    case danger
-    case unknown
+    case checkFirst
 
     var id: String { rawValue }
 
@@ -16,35 +14,27 @@ enum SafetyFilter: String, CaseIterable, Identifiable {
         switch self {
         case .all: return "All"
         case .safe: return "Safe to Clean"
-        case .medium: return "Check First"
-        case .danger: return "Do Not Delete"
-        case .unknown: return "Not Sure"
+        case .checkFirst: return "Check First"
         }
     }
 
-    var safetyLevel: SafetyLevel? {
-        switch self {
-        case .all: return nil
-        case .safe: return .safe
-        case .medium: return .medium
-        case .danger: return .danger
-        case .unknown: return .unknown
-        }
-    }
-
+    /// Returns `true` when the item should appear under this filter.
+    /// Items tagged `.unknown` are silently excluded from every filter.
     func matches(_ safetyInfo: SafetyInfo) -> Bool {
-        guard let safetyLevel else { return true }
-        return safetyInfo.level == safetyLevel
+        if safetyInfo.level == .unknown { return false }
+        switch self {
+        case .all: return true
+        case .safe: return safetyInfo.level == .safe
+        case .checkFirst: return safetyInfo.level == .medium || safetyInfo.level == .danger
+        }
     }
 
-    /// Cmd+1 … Cmd+5
+    /// Cmd+1 … Cmd+3
     var shortcutDigit: Character {
         switch self {
         case .all: return "1"
         case .safe: return "2"
-        case .medium: return "3"
-        case .danger: return "4"
-        case .unknown: return "5"
+        case .checkFirst: return "3"
         }
     }
 
@@ -53,9 +43,7 @@ enum SafetyFilter: String, CaseIterable, Identifiable {
         switch self {
         case .all: return "Show all items\(suffix) (Cmd+1)"
         case .safe: return "Show safe items\(suffix) (Cmd+2)"
-        case .medium: return "Show check-first items\(suffix) (Cmd+3)"
-        case .danger: return "Show do-not-delete items\(suffix) (Cmd+4)"
-        case .unknown: return "Show not-sure items\(suffix) (Cmd+5)"
+        case .checkFirst: return "Show check-first items\(suffix) (Cmd+3)"
         }
     }
 
@@ -64,9 +52,7 @@ enum SafetyFilter: String, CaseIterable, Identifiable {
         switch self {
         case .all: return "square.grid.2x2.fill"
         case .safe: return "checkmark.shield.fill"
-        case .medium: return "exclamationmark.triangle.fill"
-        case .danger: return "xmark.octagon.fill"
-        case .unknown: return "questionmark.circle.fill"
+        case .checkFirst: return "exclamationmark.triangle.fill"
         }
     }
 
@@ -75,9 +61,7 @@ enum SafetyFilter: String, CaseIterable, Identifiable {
         switch self {
         case .all: return Color(red: 0 / 255, green: 71 / 255, blue: 171 / 255)
         case .safe: return Color(red: 13 / 255, green: 110 / 255, blue: 61 / 255)
-        case .medium: return Color(red: 169 / 255, green: 68 / 255, blue: 0 / 255)
-        case .danger: return Color(red: 179 / 255, green: 32 / 255, blue: 32 / 255)
-        case .unknown: return Color(red: 69 / 255, green: 69 / 255, blue: 69 / 255)
+        case .checkFirst: return Color(red: 169 / 255, green: 68 / 255, blue: 0 / 255)
         }
     }
 }
@@ -168,7 +152,6 @@ struct FilterSortToolbar: View {
     let isDeleting: Bool
 
     let onCleanSelected: () -> Void
-    var pendingAIResolutionCount: Int = 0
 
     /// When true (App Caches), chips and sort/bulk sit on separate rows with a horizontally scrolling chip row.
     var useStackedLayout: Bool = false

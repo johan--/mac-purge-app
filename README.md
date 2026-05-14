@@ -13,7 +13,6 @@ Purge scans your Mac for cache files and junk left behind by apps and developmen
 - **App Caches** — Scans your Library/Caches folder and identifies every app cache with a friendly name and plain English explanation
 - **Dev Tools** — Detects node_modules, Xcode DerivedData, Docker images, Python environments, Rust build folders, and more grouped by project
 - **Safety Tags** — Every item is tagged Safe to Clean, Check First, Do Not Delete, or Not Sure before you delete anything
-- **AI Identification** — Uses AI to identify unknown cache folders and explain them in plain English
 - **Scheduled Cleaning** — Automatically cleans safe files on a schedule you control
 
 ---
@@ -62,15 +61,16 @@ Purge needs Full Disk Access to scan your cache folders.
 
 ---
 
-## AI Identification (Recommended)
+## How Purge identifies folders
 
-Purge can use AI to identify unknown cache folders. To enable this:
+Purge uses a local database of known cache folders to identify and categorize everything it finds. The resolution order is:
 
-1. Get a free API key from [OpenRouter](https://openrouter.ai)
-2. Open Purge and go to Settings
-3. Paste your key in the AI Identification section
+1. **Your manual overrides** — any category you set yourself always wins
+2. **Saved categorizations** — previously identified folders are remembered
+3. **Bundled database** — a curated `explanations.json` ships with the app
+4. **Safety tier list** — pattern-based rules for common folder names
 
-Purge only calls AI for folders it cannot identify on its own. Results are saved permanently so each folder is only ever looked up once.
+Folders that don't match any source are tagged "Not Sure" so you can review them yourself.
 
 ---
 

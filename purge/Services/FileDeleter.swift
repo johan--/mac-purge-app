@@ -70,12 +70,22 @@ final class FileDeleter {
             switch decision {
             case .allow:
                 let size = scanner.calculateFolderSize(at: url)
-                do {
-                    try FileManager.default.removeItem(at: url)
-                    totalDeleted += size
-                    deletedItems.append(DeletedItem(path: url.path, sizeBytes: size, displayName: friendlyTitle))
-                } catch {
-                    failedItems.append(FailedDeletionItem(path: url.path, reason: error.localizedDescription))
+                if let udid = Self.coreSimulatorDeviceUDID(from: url) {
+                    switch Self.deleteCoreSimulatorDevice(udid: udid) {
+                    case .success:
+                        totalDeleted += size
+                        deletedItems.append(DeletedItem(path: url.path, sizeBytes: size, displayName: friendlyTitle))
+                    case .failure(let message):
+                        failedItems.append(FailedDeletionItem(path: url.path, reason: message))
+                    }
+                } else {
+                    do {
+                        try FileManager.default.removeItem(at: url)
+                        totalDeleted += size
+                        deletedItems.append(DeletedItem(path: url.path, sizeBytes: size, displayName: friendlyTitle))
+                    } catch {
+                        failedItems.append(FailedDeletionItem(path: url.path, reason: error.localizedDescription))
+                    }
                 }
 
             case .blockedNeverDelete, .blockedNotWhitelisted:
@@ -103,6 +113,47 @@ final class FileDeleter {
         )
         deletionLog.append(report)
         return report
+    }
+
+    /// Returns the simulator UDID when `url` is exactly `…/CoreSimulator/Devices/{UUID}`.
+    private static func coreSimulatorDeviceUDID(from url: URL) -> String? {
+        let std = url.standardizedFileURL
+        let name = std.lastPathComponent
+        guard UUID(uuidString: name) != nil else { return nil }
+        guard std.deletingLastPathComponent().lastPathComponent == "Devices" else { return nil }
+        guard std.path.contains("CoreSimulator/Devices") else { return nil }
+        return name
+    }
+
+    private enum SimctlDeleteResult {
+        case success
+        case failure(String)
+    }
+
+    private static func deleteCoreSimulatorDevice(udid: String) -> SimctlDeleteResult {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+        process.arguments = ["simctl", "delete", udid]
+
+        let errPipe = Pipe()
+        process.standardError = errPipe
+        process.standardOutput = Pipe()
+
+        do {
+            try process.run()
+        } catch {
+            return .failure(error.localizedDescription)
+        }
+        process.waitUntilExit()
+        if process.terminationStatus == 0 {
+            return .success
+        }
+        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+        let errText = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let errText, !errText.isEmpty {
+            return .failure(errText)
+        }
+        return .failure("simctl delete failed (exit \(process.terminationStatus))")
     }
 
     private func volumeCapacitySnapshot(for url: URL) -> (total: Int64, available: Int64) {

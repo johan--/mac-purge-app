@@ -7,20 +7,13 @@ struct DevToolsView: View {
     let onScan: () -> Void
 
     @State private var expandedProjectRoots = Set<String>()
+    @State private var iosSimulatorsExpanded = false
     /// Last completed dev scan; stabilizes chip counts during an in-flight rescan.
     @State private var displayedDevTools: [DevTool] = []
     @State private var displayedProjectGroups: [ProjectGroup] = []
 
     /// Stable list IDs so sibling `ForEach` loops in the same `List` never share
     /// bare `Int` identities (which can duplicate or swap rows on expand/collapse).
-    private struct StandardToolRowKey: Hashable, Identifiable {
-        let id: String
-        let toolIndex: Int
-        static func make(_ toolIndex: Int) -> StandardToolRowKey {
-            StandardToolRowKey(id: "standard-tool-\(toolIndex)", toolIndex: toolIndex)
-        }
-    }
-
     private struct ProjectGroupRowKey: Hashable, Identifiable {
         let id: String
         let groupIndex: Int
@@ -42,20 +35,20 @@ struct DevToolsView: View {
         }
     }
 
+    private enum MergedDevStandardRow: Hashable, Identifiable {
+        case tool(index: Int)
+        case simulators
+
+        var id: String {
+            switch self {
+            case .tool(let index): return "merged-tool-\(index)"
+            case .simulators: return "merged-simulators"
+            }
+        }
+    }
+
     @AppStorage("filter.devTools") private var filterRaw: String = SafetyFilter.all.rawValue
     @AppStorage("sort.devTools") private var sortRaw: String = SortOption.sizeDesc.rawValue
-    @AppStorage("hasSeenAIUpgradeBanner") private var hasSeenAIUpgradeBanner = false
-    @State private var showAIUpgradeBanner = false
-    @State private var hasScheduledAIUpgradeBannerAutoDismiss = false
-    @State private var aiUpgradeBannerAutoDismissTask: Task<Void, Never>?
-
-    /// Percent of unknown rows the post-key AI sweep has resolved so far (0–100).
-    private var aiUpgradeProgress: Int {
-        let total = store.unknownReidentifyTotal
-        guard total > 0 else { return 0 }
-        let done = min(store.unknownReidentifyResolved, total)
-        return Int((Double(done) / Double(total)) * 100)
-    }
 
     private var currentSafetyFilter: SafetyFilter {
         SafetyFilter(rawValue: filterRaw) ?? .all
@@ -146,13 +139,143 @@ struct DevToolsView: View {
         }
     }
 
-    private func isEligibleForManualBulkSelection(_ info: SafetyInfo) -> Bool {
-        switch info.level {
-        case .safe, .medium, .danger:
-            return true
-        case .unknown:
-            return !ExplanationResolver.isAwaitingAI(info)
+    private var simulatorSectionVisible: Bool {
+        !store.simulatorDevices.isEmpty
+            && store.simulatorDevices.contains { artifactVisible($0.safetyInfo) }
+    }
+
+    private func visibleSimulatorIndices() -> [Int] {
+        store.simulatorDevices.indices.filter { artifactVisible(store.simulatorDevices[$0].safetyInfo) }
+    }
+
+    private func sortedVisibleSimulatorIndices() -> [Int] {
+        let raw = visibleSimulatorIndices()
+        let list = store.simulatorDevices
+        switch currentSort {
+        case .sizeDesc:
+            return raw.sorted { (list[$0].sizeOnDisk ?? 0) > (list[$1].sizeOnDisk ?? 0) }
+        case .sizeAsc:
+            return raw.sorted { (list[$0].sizeOnDisk ?? 0) < (list[$1].sizeOnDisk ?? 0) }
+        case .dateNewest:
+            return raw.sorted { (list[$0].lastBootedAt ?? .distantPast) > (list[$1].lastBootedAt ?? .distantPast) }
+        case .dateOldest:
+            return raw.sorted { (list[$0].lastBootedAt ?? .distantPast) < (list[$1].lastBootedAt ?? .distantPast) }
+        case .nameAZ:
+            return raw.sorted {
+                list[$0].safetyInfo.headline.localizedCaseInsensitiveCompare(list[$1].safetyInfo.headline) == .orderedAscending
+            }
         }
+    }
+
+    private func simulatorSectionByteTotal() -> Int64 {
+        visibleSimulatorIndices().reduce(Int64(0)) { $0 + (store.simulatorDevices[$1].sizeOnDisk ?? 0) }
+    }
+
+    private var simulatorSectionHasPendingSizes: Bool {
+        visibleSimulatorIndices().contains { store.simulatorDevices[$0].sizeOnDisk == nil }
+    }
+
+    private func simulatorSectionModifiedDate() -> Date {
+        visibleSimulatorIndices()
+            .map { store.simulatorDevices[$0].lastBootedAt ?? .distantPast }
+            .max() ?? .distantPast
+    }
+
+    private func worstSafetyLevel(_ levels: [SafetyLevel]) -> SafetyLevel {
+        if levels.contains(.danger) { return .danger }
+        if levels.contains(.medium) { return .medium }
+        if levels.contains(.unknown) { return .unknown }
+        return .safe
+    }
+
+    private func simulatorParentSafetyInfo() -> SafetyInfo {
+        let visible = visibleSimulatorIndices().map { store.simulatorDevices[$0] }
+        let worst = worstSafetyLevel(visible.map(\.safetyInfo.level))
+        return SafetyInfo(
+            level: worst,
+            headline: "iOS Simulators",
+            explanation: "Each entry is one simulator device folder. Expand the list to delete individual simulators safely.",
+            recoverySteps: "",
+            reinstallCommand: nil
+        )
+    }
+
+    private func mergedStandardRowEntries() -> [MergedDevStandardRow] {
+        let tools = sortedStandardToolIndices()
+        var rows: [MergedDevStandardRow] = tools.map { .tool(index: $0) }
+        guard simulatorSectionVisible else { return rows }
+        rows.append(.simulators)
+
+        func entrySize(_ e: MergedDevStandardRow) -> Int64 {
+            switch e {
+            case .tool(let i): return store.devTools[i].sizeBytes
+            case .simulators: return simulatorSectionByteTotal()
+            }
+        }
+
+        func entryDate(_ e: MergedDevStandardRow) -> Date {
+            switch e {
+            case .tool(let i): return devToolModified(store.devTools[i])
+            case .simulators: return simulatorSectionModifiedDate()
+            }
+        }
+
+        func entryName(_ e: MergedDevStandardRow) -> String {
+            switch e {
+            case .tool(let i): return store.devTools[i].toolName
+            case .simulators: return "iOS Simulators"
+            }
+        }
+
+        switch currentSort {
+        case .sizeDesc:
+            rows.sort { entrySize($0) > entrySize($1) }
+        case .sizeAsc:
+            rows.sort { entrySize($0) < entrySize($1) }
+        case .dateNewest:
+            rows.sort { entryDate($0) > entryDate($1) }
+        case .dateOldest:
+            rows.sort { entryDate($0) < entryDate($1) }
+        case .nameAZ:
+            rows.sort { entryName($0).localizedCaseInsensitiveCompare(entryName($1)) == .orderedAscending }
+        }
+        return rows
+    }
+
+    private func simulatorNonDangerVisibleIndices() -> [Int] {
+        visibleSimulatorIndices().filter { store.simulatorDevices[$0].safetyInfo.level != .danger }
+    }
+
+    private func simulatorParentTriState() -> SelectAllTriState {
+        let ix = simulatorNonDangerVisibleIndices()
+        guard !ix.isEmpty else { return .none }
+        let selected = ix.filter { store.simulatorDevices[$0].isSelected }.count
+        if selected == 0 { return .none }
+        if selected == ix.count { return .all }
+        return .mixed
+    }
+
+    private func toggleSimulatorParentCheckbox() {
+        let ix = simulatorNonDangerVisibleIndices()
+        guard !ix.isEmpty else { return }
+        let allOn = ix.allSatisfy { store.simulatorDevices[$0].isSelected }
+        store.setSimulatorGroupNonDangerSelection(allSelected: !allOn)
+    }
+
+    private func eligibleSimulatorIndicesForToolbarSelectAll() -> [Int] {
+        visibleSimulatorIndices().filter { store.simulatorDevices[$0].safetyInfo.level == .safe }
+    }
+
+    private func simulatorSubtitle(_ device: SimulatorDevice) -> String {
+        if !device.isAvailable { return "Unavailable — runtime not installed" }
+        guard let date = device.lastBootedAt else { return "Never used" }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        return "Last used \(formatter.localizedString(for: date, relativeTo: Date()))"
+    }
+
+    private func isEligibleForManualBulkSelection(_ info: SafetyInfo) -> Bool {
+        true
     }
 
     private func eligibleArtifactIndices(forGroupIndex gi: Int) -> [Int] {
@@ -239,18 +362,22 @@ struct DevToolsView: View {
     }
 
     private var hasEligibleSelectableRows: Bool {
-        !eligibleStandardToolIndices().isEmpty || !eligibleProjectArtifactPairs().isEmpty
+        !eligibleStandardToolIndices().isEmpty
+            || !eligibleProjectArtifactPairs().isEmpty
+            || !simulatorNonDangerVisibleIndices().isEmpty
     }
 
     private var selectAllDeveloperState: SelectAllTriState {
         let toolIx = eligibleStandardToolIndices()
         let pairs = eligibleProjectArtifactPairs()
-        let total = toolIx.count + pairs.count
+        let simSafeIx = eligibleSimulatorIndicesForToolbarSelectAll()
+        let total = toolIx.count + pairs.count + simSafeIx.count
         guard total > 0 else { return .none }
 
         var selected = 0
         for ti in toolIx where store.devTools[ti].isSelected { selected += 1 }
         for p in pairs where store.projectGroups[p.0].artifacts[p.1].isSelected { selected += 1 }
+        for si in simSafeIx where store.simulatorDevices[si].isSelected { selected += 1 }
 
         if selected == 0 { return .none }
         if selected == total { return .all }
@@ -260,17 +387,22 @@ struct DevToolsView: View {
     private var selectedInScopeCount: Int {
         let toolIx = eligibleStandardToolIndices().filter { store.devTools[$0].isSelected }.count
         let pairSelected = eligibleProjectArtifactPairs().filter { store.projectGroups[$0.0].artifacts[$0.1].isSelected }.count
-        return toolIx + pairSelected
+        let simSelected = visibleSimulatorIndices().filter { store.simulatorDevices[$0].isSelected }.count
+        return toolIx + pairSelected + simSelected
     }
 
     private func developerSafetySnapshotsForChipRow() -> [SafetyInfo] {
         let tools = isLoading ? displayedDevTools : store.devTools
         let groups = isLoading ? displayedProjectGroups : store.projectGroups
+        let sims = isLoading ? [] : store.simulatorDevices
         var infos: [SafetyInfo] = tools.filter(\.isDetected).map(\.safetyInfo)
         for group in groups {
             for art in group.artifacts {
                 infos.append(art.safetyInfo)
             }
+        }
+        for sim in sims {
+            infos.append(sim.safetyInfo)
         }
         return infos
     }
@@ -279,55 +411,61 @@ struct DevToolsView: View {
         let infos = developerSafetySnapshotsForChipRow()
         var d: [SafetyFilter: Int] = [:]
         for filter in SafetyFilter.allCases {
-            switch filter {
-            case .all:
-                d[filter] = infos.count
-            case .safe:
-                d[filter] = infos.filter { $0.level == .safe }.count
-            case .medium:
-                d[filter] = infos.filter { $0.level == .medium }.count
-            case .danger:
-                d[filter] = infos.filter { $0.level == .danger }.count
-            case .unknown:
-                d[filter] = infos.filter { $0.level == .unknown }.count
-            }
+            d[filter] = infos.filter { filter.matches($0) }.count
         }
         return d
     }
 
     private var developerListEmpty: Bool {
-        store.projectGroups.isEmpty && store.devTools.isEmpty
+        store.projectGroups.isEmpty && store.devTools.isEmpty && store.simulatorDevices.isEmpty
     }
 
     private var nothingMatchesFilter: Bool {
-        filteredStandardToolIndices().isEmpty && filteredProjectGroupIndices().isEmpty
+        mergedStandardRowEntries().isEmpty && filteredProjectGroupIndices().isEmpty
     }
 
-    /// Row counts mirror the dev tools list + chip aggregates (detected tools + all project artifacts).
+    /// Row counts mirror the dev tools list + chip aggregates (detected tools + all project artifacts),
+    /// excluding items tagged `.unknown` since they are hidden from display.
     private var developerTotalRowCount: Int {
-        store.devTools.filter(\.isDetected).count +
-            store.projectGroups.reduce(0) { $0 + $1.artifacts.count }
+        store.devTools.filter { $0.isDetected && $0.safetyInfo.level != .unknown }.count +
+            store.simulatorDevices.filter { $0.safetyInfo.level != .unknown }.count +
+            store.projectGroups.reduce(0) { sum, group in
+                sum + group.artifacts.filter { $0.safetyInfo.level != .unknown }.count
+            }
     }
 
     private var developerVisibleRowCount: Int {
-        sortedStandardToolIndices().count +
+        let simChildRows = (iosSimulatorsExpanded && simulatorSectionVisible)
+            ? sortedVisibleSimulatorIndices().count
+            : 0
+        return mergedStandardRowEntries().count + simChildRows +
             sortedProjectGroupIndices().reduce(0) { sum, gi in
                 sum + sortedVisibleArtifactIndices(forGroup: gi).count
             }
     }
 
     private var developerTotalByteSize: Int64 {
-        let tools = store.devTools.filter(\.isDetected).reduce(Int64(0)) { $0 + $1.sizeBytes }
+        let tools = store.devTools.filter { $0.isDetected && $0.safetyInfo.level != .unknown }
+            .reduce(Int64(0)) { $0 + $1.sizeBytes }
+        let sims = store.simulatorDevices
+            .filter { $0.safetyInfo.level != .unknown }
+            .reduce(Int64(0)) { $0 + ($1.sizeOnDisk ?? 0) }
         let artifacts = store.projectGroups.reduce(Int64(0)) { sum, group in
-            sum + group.artifacts.reduce(Int64(0)) { $0 + $1.sizeBytes }
+            sum + group.artifacts.filter { $0.safetyInfo.level != .unknown }
+                .reduce(Int64(0)) { $0 + $1.sizeBytes }
         }
-        return tools + artifacts
+        return tools + sims + artifacts
     }
 
     private var developerVisibleByteSize: Int64 {
         var sum = Int64(0)
-        for i in filteredStandardToolIndices() {
-            sum += store.devTools[i].sizeBytes
+        for entry in mergedStandardRowEntries() {
+            switch entry {
+            case .tool(let i):
+                sum += store.devTools[i].sizeBytes
+            case .simulators:
+                sum += simulatorSectionByteTotal()
+            }
         }
         for gi in filteredProjectGroupIndices() {
             let g = store.projectGroups[gi]
@@ -340,16 +478,6 @@ struct DevToolsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if showAIUpgradeBanner {
-                aiUpgradeBanner
-                    .transition(
-                        .asymmetric(
-                            insertion: .move(edge: .top).combined(with: .opacity),
-                            removal: .move(edge: .top).combined(with: .opacity)
-                        )
-                    )
-            }
-
             FilterSortToolbar(
                 safetyFilter: safetyFilterBinding,
                 sortOption: sortOptionBinding,
@@ -430,7 +558,6 @@ struct DevToolsView: View {
         .navigationTitle("Dev Tools")
         .onAppear {
             syncDisplayedDeveloperSnapshotIfIdle()
-            syncAIUpgradeBannerVisibilityForAppear()
         }
         .onChange(of: isLoading) { scanning in
             if !scanning {
@@ -443,15 +570,6 @@ struct DevToolsView: View {
         }
         .onChange(of: store.projectGroups) { _ in
             syncDisplayedDeveloperSnapshotIfIdle()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .apiKeyAdded)) { _ in
-            guard !hasSeenAIUpgradeBanner else { return }
-            withAnimation(.easeInOut(duration: 0.35)) {
-                showAIUpgradeBanner = true
-            }
-        }
-        .onChange(of: aiUpgradeProgress) { newProgress in
-            scheduleAIUpgradeBannerAutoDismissIfComplete(progress: newProgress)
         }
         .toolbar {
             ToolbarItem(placement: .automatic) {
@@ -472,83 +590,6 @@ struct DevToolsView: View {
         displayedProjectGroups = store.projectGroups
     }
 
-    /// Re-show the AI upgrade banner when the user navigates to Dev Tools while
-    /// the post-key sweep is still in flight. Lets the banner "follow" the user
-    /// across tabs without requiring a fresh notification.
-    private func syncAIUpgradeBannerVisibilityForAppear() {
-        guard !hasSeenAIUpgradeBanner else { return }
-        guard store.isReidentifyingUnknownItems || store.unknownReidentifyTotal > 0 else { return }
-        guard !showAIUpgradeBanner else { return }
-        withAnimation(.easeInOut(duration: 0.35)) {
-            showAIUpgradeBanner = true
-        }
-    }
-
-    private func scheduleAIUpgradeBannerAutoDismissIfComplete(progress: Int) {
-        guard progress >= 100,
-              showAIUpgradeBanner,
-              !hasScheduledAIUpgradeBannerAutoDismiss
-        else { return }
-        hasScheduledAIUpgradeBannerAutoDismiss = true
-        aiUpgradeBannerAutoDismissTask?.cancel()
-        aiUpgradeBannerAutoDismissTask = Task {
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                withAnimation(.easeInOut(duration: 0.35)) {
-                    showAIUpgradeBanner = false
-                }
-                hasSeenAIUpgradeBanner = true
-            }
-        }
-    }
-
-    private var aiUpgradeBanner: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "sparkles")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(Color.accentColor)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .top, spacing: 8) {
-                    Text("AI is now identifying your unknown folders")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Spacer(minLength: 8)
-
-                    Button("Got it") {
-                        aiUpgradeBannerAutoDismissTask?.cancel()
-                        aiUpgradeBannerAutoDismissTask = nil
-                        withAnimation(.easeInOut(duration: 0.35)) {
-                            showAIUpgradeBanner = false
-                        }
-                        hasSeenAIUpgradeBanner = true
-                    }
-                    .buttonStyle(.plain)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.accentColor)
-                    .fixedSize()
-                }
-
-                Text("Purge is categorising dev tool folders it could not identify before. Results are saved permanently · \(aiUpgradeProgress)% done")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(.numericText())
-                    .animation(.easeInOut(duration: 0.25), value: aiUpgradeProgress)
-            }
-        }
-        .padding(14)
-        .background(Color.accentColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .padding(.horizontal)
-        .padding(.top, 10)
-        .padding(.bottom, 2)
-    }
-
     private var placeholderNoData: some View {
         VStack(spacing: 8) {
             Text("No dev tool folders surfaced yet.")
@@ -561,8 +602,9 @@ struct DevToolsView: View {
 
     private var developerListOnly: some View {
         List {
-            ForEach(sortedStandardToolIndices().map(StandardToolRowKey.make)) { row in
-                    let index = row.toolIndex
+            ForEach(mergedStandardRowEntries()) { entry in
+                switch entry {
+                case .tool(let index):
                     let tool = store.devTools[index]
                     let toolID = tool.id
                     let primaryPath = tool.primaryOverridePath
@@ -577,7 +619,7 @@ struct DevToolsView: View {
                         ),
                         safetyInfo: tool.safetyInfo,
                         icon: symbolIcon(tool.iconName),
-                        onRequestUnknownDelete: tool.safetyInfo.level == .unknown && !ExplanationResolver.isAwaitingAI(tool.safetyInfo)
+                        onRequestUnknownDelete: tool.safetyInfo.level == .unknown
                             ? { store.requestUnknownDeletion(candidates: store.unknownDeletionCandidates(forDevTool: tool)) }
                             : nil,
                         detailCaption: nil,
@@ -592,6 +634,35 @@ struct DevToolsView: View {
                     )
                     .disabled(!tool.isDetected)
                     .opacity(tool.isDetected ? 1 : 0.45)
+
+                case .simulators:
+                    iosSimulatorsHostRow
+                    if iosSimulatorsExpanded {
+                        ForEach(sortedVisibleSimulatorIndices(), id: \.self) { si in
+                            let device = store.simulatorDevices[si]
+                            ScanResultRow(
+                                isSelected: bindingForSimulator(id: device.id),
+                                primaryLabel: device.safetyInfo.headline,
+                                formattedSize: device.formattedSize,
+                                dateModifiedLine: simulatorSubtitle(device),
+                                safetyInfo: device.safetyInfo,
+                                icon: symbolIcon("ipad.and.iphone"),
+                                onRequestUnknownDelete: nil,
+                                detailCaption: nil,
+                                reinstallSafety: .notApplicable,
+                                showUncommittedRepoChanges: false,
+                                onRecategorize: nil,
+                                onMarkSafe: nil,
+                                onMarkMedium: nil,
+                                onMarkDanger: nil,
+                                onResetToAutomatic: nil,
+                                isUserOverride: false,
+                                allowsBulkSelection: !device.isDanger
+                            )
+                            .padding(.leading, 24)
+                        }
+                    }
+                }
             }
 
             if !sortedProjectGroupIndices().isEmpty {
@@ -623,7 +694,7 @@ struct DevToolsView: View {
                                         ),
                                         safetyInfo: art.safetyInfo,
                                         icon: NSWorkspace.shared.icon(forFileType: "public.folder"),
-                                        onRequestUnknownDelete: art.safetyInfo.level == .unknown && !ExplanationResolver.isAwaitingAI(art.safetyInfo)
+                                        onRequestUnknownDelete: art.safetyInfo.level == .unknown
                                             ? {
                                                 store.requestUnknownDeletion(candidates:
                                                     store.unknownDeletionCandidates(forArtifact: art)
@@ -652,6 +723,71 @@ struct DevToolsView: View {
             }
         }
         .listStyle(.inset)
+    }
+
+    private func bindingForSimulator(id: UUID) -> Binding<Bool> {
+        Binding(
+            get: {
+                store.simulatorDevices.first(where: { $0.id == id })?.isSelected ?? false
+            },
+            set: { newVal in
+                store.setSimulatorDeviceSelected(id: id, isSelected: newVal)
+            }
+        )
+    }
+
+    private var iosSimulatorsHostRow: some View {
+        let parentInfo = simulatorParentSafetyInfo()
+        let sizeLabel = simulatorSectionHasPendingSizes
+            ? "Calculating…"
+            : formatBytes(simulatorSectionByteTotal())
+        return HStack(alignment: .center, spacing: 6) {
+            Button {
+                withAnimation(.spring(duration: 0.2)) {
+                    iosSimulatorsExpanded.toggle()
+                }
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 12, height: 44, alignment: .center)
+                    .contentShape(Rectangle())
+                    .rotationEffect(.degrees(iosSimulatorsExpanded ? 90 : 0))
+                    .animation(.spring(duration: 0.2), value: iosSimulatorsExpanded)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(iosSimulatorsExpanded ? "Collapse iOS Simulators" : "Expand iOS Simulators")
+
+            TriStateCheckbox(title: "", state: simulatorParentTriState()) {
+                toggleSimulatorParentCheckbox()
+            }
+            .frame(width: 24)
+
+            Circle()
+                .fill(parentInfo.level.color)
+                .frame(width: 8, height: 8)
+
+            Image(nsImage: symbolIcon("ipad.and.iphone"))
+                .resizable()
+                .frame(width: 24, height: 24)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("iOS Simulators")
+                    .font(.headline.weight(.semibold))
+                Text("Shutdown devices only — booted simulators stay hidden.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 8)
+            Text(sizeLabel)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("iOS Simulators")
     }
 
     private func projectDisclosureHeader(for group: ProjectGroup, groupIndex gi: Int, isExpanded: Bool) -> some View {
@@ -734,11 +870,14 @@ struct DevToolsView: View {
     private func toggleDeveloperSelectAll() {
         let toolsIx = eligibleStandardToolIndices()
         let pairs = eligibleProjectArtifactPairs()
-        guard !toolsIx.isEmpty || !pairs.isEmpty else { return }
+        let simSafeIx = eligibleSimulatorIndicesForToolbarSelectAll()
+        guard !toolsIx.isEmpty || !pairs.isEmpty || !simSafeIx.isEmpty else { return }
 
+        let allSimSafeSelected = simSafeIx.allSatisfy { store.simulatorDevices[$0].isSelected }
         let allOn =
             toolsIx.allSatisfy { store.devTools[$0].isSelected } &&
-            pairs.allSatisfy { store.projectGroups[$0.0].artifacts[$0.1].isSelected }
+            pairs.allSatisfy { store.projectGroups[$0.0].artifacts[$0.1].isSelected } &&
+            allSimSafeSelected
 
         let newVal = !allOn
         for ti in toolsIx {
@@ -748,6 +887,18 @@ struct DevToolsView: View {
         }
         for p in pairs {
             store.setProjectArtifactSelected(groupIndex: p.0, artifactIndex: p.1, isSelected: newVal)
+        }
+        for si in simSafeIx {
+            store.setSimulatorDeviceSelected(id: store.simulatorDevices[si].id, isSelected: newVal)
+        }
+        if newVal {
+            for si in visibleSimulatorIndices() where store.simulatorDevices[si].safetyInfo.level != .safe {
+                store.setSimulatorDeviceSelected(id: store.simulatorDevices[si].id, isSelected: false)
+            }
+        } else {
+            for si in store.simulatorDevices.indices {
+                store.setSimulatorDeviceSelected(id: store.simulatorDevices[si].id, isSelected: false)
+            }
         }
     }
 

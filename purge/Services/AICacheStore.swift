@@ -1,5 +1,9 @@
 import Foundation
 
+/// Read-only after AI removal. Existing cached entries are still surfaced
+/// so users who previously had AI results do not lose their categorizations.
+/// New entries are no longer written. Clear via Settings to reset.
+
 struct AICacheEntry: Codable, Sendable {
     let displayName: String
     let tag: String
@@ -65,47 +69,6 @@ enum AICacheStore {
             return entries[canonical]
         }
         return nil
-    }
-
-    nonisolated static func write(
-        folderName: String,
-        displayName: String,
-        tag: String,
-        explanation: String,
-        confidence: String? = nil
-    ) {
-        lock.lock()
-        defer { lock.unlock() }
-        var entries = loadEntriesLocked()
-        entries[folderName] = AICacheEntry(
-            displayName: displayName,
-            tag: tag,
-            explanation: explanation,
-            confidence: confidence
-        )
-        ensureDirectory()
-        if let data = try? JSONEncoder().encode(entries) {
-            try? data.write(to: fileURL(), options: [.atomic])
-        }
-        refreshCacheLocked(entries)
-    }
-
-    nonisolated static func remove(folderName: String) {
-        lock.lock()
-        defer { lock.unlock() }
-        var entries = loadEntriesLocked()
-        if entries.removeValue(forKey: folderName) == nil {
-            if let canonical = canonicalKeysLower[folderName.lowercased()] {
-                entries.removeValue(forKey: canonical)
-            } else {
-                return
-            }
-        }
-        ensureDirectory()
-        if let data = try? JSONEncoder().encode(entries) {
-            try? data.write(to: fileURL(), options: [.atomic])
-        }
-        refreshCacheLocked(entries)
     }
 
     nonisolated static func clearAll() {
