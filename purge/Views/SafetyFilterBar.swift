@@ -55,15 +55,6 @@ enum SafetyFilter: String, CaseIterable, Identifiable {
         case .checkFirst: return "exclamationmark.triangle.fill"
         }
     }
-
-    /// Fills tuned for **WCAG 2.1 AA** (~4.5:1) with white labels at caption size on macOS dark/light appearances.
-    var activeFillColor: Color {
-        switch self {
-        case .all: return Color(red: 0 / 255, green: 71 / 255, blue: 171 / 255)
-        case .safe: return Color(red: 13 / 255, green: 110 / 255, blue: 61 / 255)
-        case .checkFirst: return Color(red: 169 / 255, green: 68 / 255, blue: 0 / 255)
-        }
-    }
 }
 
 enum SortOption: String, CaseIterable, Identifiable {
@@ -82,6 +73,16 @@ enum SortOption: String, CaseIterable, Identifiable {
         case .dateNewest: return "Date modified (newest first)"
         case .dateOldest: return "Date modified (oldest first)"
         case .nameAZ: return "Name (A to Z)"
+        }
+    }
+
+    var shortDisplayName: String {
+        switch self {
+        case .sizeDesc: return "Largest"
+        case .sizeAsc: return "Smallest"
+        case .dateNewest: return "Newest"
+        case .dateOldest: return "Oldest"
+        case .nameAZ: return "Name"
         }
     }
 }
@@ -157,12 +158,18 @@ struct FilterSortToolbar: View {
     var useStackedLayout: Bool = false
     var showsControlsRow: Bool = true
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     private var bulkTitle: String? {
         "Clean Selected"
     }
 
     private var bulkDisabled: Bool {
         selectedInScopeCount == 0 || isDeleting
+    }
+
+    private var activeChipFill: Color {
+        AppStyle.selectionFill
     }
 
     var body: some View {
@@ -178,24 +185,19 @@ struct FilterSortToolbar: View {
     private var stackedToolbarBody: some View {
         VStack(alignment: .leading, spacing: 8) {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
+                HStack(spacing: 4) {
                     ForEach(SafetyFilter.allCases) { filter in
                         safetyChip(filter)
                     }
                 }
                 .padding(.vertical, 2)
             }
+            .disableScrollClippingWhenAvailable()
             .frame(maxWidth: .infinity, minHeight: 34, maxHeight: 34, alignment: .leading)
 
             if showsControlsRow {
                 HStack(alignment: .center, spacing: 10) {
-                    Picker("Sort", selection: $sortOption) {
-                        ForEach(SortOption.allCases) { option in
-                            Text(option.displayName).tag(option)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .fixedSize()
+                    AppSortMenu(selection: $sortOption)
 
                     Spacer(minLength: 8)
 
@@ -210,21 +212,16 @@ struct FilterSortToolbar: View {
     private var compactToolbarBody: some View {
         HStack(alignment: .center, spacing: 10) {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
+                HStack(spacing: 4) {
                     ForEach(SafetyFilter.allCases) { filter in
                         safetyChip(filter)
                     }
                 }
             }
+            .disableScrollClippingWhenAvailable()
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Picker("Sort", selection: $sortOption) {
-                ForEach(SortOption.allCases) { option in
-                    Text(option.displayName).tag(option)
-                }
-            }
-            .pickerStyle(.menu)
-            .fixedSize()
+            AppSortMenu(selection: $sortOption)
 
             if let title = bulkTitle {
                 cleanSelectedBulkButton(title: title)
@@ -239,10 +236,8 @@ struct FilterSortToolbar: View {
         } label: {
             Label(title, systemImage: "trash.fill")
                 .labelStyle(.titleAndIcon)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(AppButtonStyle(variant: .filled))
         .disabled(bulkDisabled)
         .fixedSize()
     }
@@ -250,31 +245,62 @@ struct FilterSortToolbar: View {
     private func safetyChip(_ filter: SafetyFilter) -> some View {
         let count = chipCounts[filter] ?? 0
         let isOn = safetyFilter == filter
-        let label = "\(filter.displayName) (\(count))"
 
         return Button {
-            safetyFilter = filter
+            select(filter)
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: 6) {
                 Image(systemName: filter.chipSymbolName)
-                    .font(.footnote.weight(isOn ? .semibold : .regular))
-                    .imageScale(.medium)
+                    .imageScale(.small)
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(isOn ? AppStyle.accent : Color.secondary)
                     .accessibilityHidden(true)
-                Text(label)
-                    .font(.caption.weight(isOn ? .semibold : .regular))
+                Text(filter.displayName)
                     .lineLimit(1)
+                Text("\(count)")
+                    .font(.callout.weight(.medium))
+                    .monospacedDigit()
+                    .foregroundStyle(.tertiary)
             }
-            .padding(.horizontal, useStackedLayout ? 12 : 10)
-            .padding(.vertical, useStackedLayout ? 6 : 5)
-            .background(
-                Capsule().fill(isOn ? filter.activeFillColor : Color.primary.opacity(0.12))
-            )
-            .foregroundStyle(isOn ? Color.white : Color.primary)
+            .font(.system(size: 13, weight: isOn ? .semibold : .regular))
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background {
+                RoundedRectangle(cornerRadius: AppStyle.Radius.chip, style: .continuous)
+                    .fill(isOn ? activeChipFill : Color.clear)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: AppStyle.Radius.chip, style: .continuous)
+                    .stroke(isOn ? AppStyle.selectionStroke : AppStyle.hairline)
+            }
+            .foregroundStyle(isOn ? Color.primary : Color.secondary)
+            .opacity(count == 0 && !isOn ? 0.45 : 1.0)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(filter.displayName), \(count) items")
         .accessibilityAddTraits(isOn ? .isSelected : [])
         .help(filter.tooltipHint())
         .keyboardShortcut(KeyEquivalent(filter.shortcutDigit), modifiers: .command)
+    }
+
+    private func select(_ filter: SafetyFilter) {
+        if reduceMotion {
+            safetyFilter = filter
+        } else {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                safetyFilter = filter
+            }
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func disableScrollClippingWhenAvailable() -> some View {
+        if #available(macOS 14.0, *) {
+            scrollClipDisabled()
+        } else {
+            self
+        }
     }
 }

@@ -64,8 +64,7 @@ struct ContentView: View {
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.blue)
+                    .buttonStyle(AppButtonStyle(variant: .filled))
                     .disabled(store.selectedCount == 0 || store.isDeleting)
                 }
             }
@@ -160,7 +159,7 @@ struct ContentView: View {
             Text(store.errorMessage ?? "")
         }
         .frame(minWidth: 800, minHeight: 600)
-        .tint(.blue)
+        .tint(AppStyle.accent)
     }
 
     private func completeOnboarding() {
@@ -172,47 +171,85 @@ struct ContentView: View {
     }
 
     private var sidebar: some View {
-        VStack(spacing: 0) {
-            List(PurgeStore.Tab.allCases, selection: $store.selectedTab) { tab in
-                Label(tab.rawValue, systemImage: tab.icon)
-                    .tag(tab)
-                    .padding(.vertical, 2)
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Purge")
+                        .font(.system(size: 15, weight: .semibold))
+                    Text("Local cleanup")
+                        .font(AppStyle.Typography.metadata)
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.top, AppStyle.Spacing.medium)
+
+                VStack(spacing: 2) {
+                    ForEach(PurgeStore.Tab.allCases) { tab in
+                        AppNavRow(
+                            title: tab.rawValue,
+                            systemImage: tab.icon,
+                            isSelected: store.selectedTab == tab,
+                            action: { store.selectedTab = tab }
+                        )
+                    }
+                }
             }
-            .listStyle(.sidebar)
+            .padding(.horizontal, AppStyle.Spacing.small)
 
-            Divider()
+            Spacer(minLength: AppStyle.Spacing.medium)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
                 Text("Space Freed")
-                    .font(.caption)
+                    .font(AppStyle.Typography.metadata)
                     .foregroundStyle(.tertiary)
                 Text(formatBytes(store.totalRecoveredBytes))
-                    .font(.title3.weight(.semibold))
+                    .font(.system(size: 20, weight: .semibold))
                     .monospacedDigit()
+                Capsule(style: .continuous)
+                    .fill(AppStyle.hairline)
+                    .frame(height: 3)
+                    .overlay(alignment: .leading) {
+                        Capsule(style: .continuous)
+                            .fill(AppStyle.accent)
+                            .frame(width: 44, height: 3)
+                    }
             }
+            .padding(AppStyle.Spacing.small)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .background(AppStyle.elevated)
+            .overlay {
+                RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
+                    .stroke(AppStyle.hairline)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous))
+            .padding(AppStyle.Spacing.small)
         }
+        .frame(minWidth: 200, idealWidth: 220, maxWidth: 280)
+        .background(AppStyle.panel)
         .navigationTitle("Purge")
     }
 
     @ViewBuilder
     private var tabContent: some View {
-        switch store.selectedTab {
-        case .appCaches:
-            AppCachesView(
-                items: $store.cacheItems,
-                isLoading: store.isScanningGeneral,
-                onScan: { Task { await store.scanGeneral() } }
-            )
-        case .devTools:
-            DevToolsView(
-                isLoading: store.isScanningDeveloper,
-                onScan: { Task { await store.scanDeveloper() } }
-            )
-        case .settings:
-            SettingsView()
+        ZStack {
+            AppStyle.canvas
+                .ignoresSafeArea()
+
+            switch store.selectedTab {
+            case .appCaches:
+                AppCachesView(
+                    items: $store.cacheItems,
+                    isLoading: store.isScanningGeneral,
+                    onScan: { Task { await store.scanGeneral() } }
+                )
+            case .devTools:
+                DevToolsView(
+                    isLoading: store.isScanningDeveloper,
+                    onScan: { Task { await store.scanDeveloper() } }
+                )
+            case .settings:
+                SettingsView()
+            }
         }
     }
 }

@@ -958,14 +958,11 @@
     "scope": "app_caches"
   },
   {
-    "key": "derived-data",
+    "key": "DerivedData",
     "display_name": "Xcode Build Files",
-    "tag": "medium",
-    "explanation": "This folder contains compiled build files created by Xcode when developing apps. Deleting it is safe but Xcode will need to recompile your projects from scratch, which can take a while.",
-    "bundle_ids": [],
-    "aliases": [
-      "DerivedData"
-    ],
+    "tag": "safe",
+    "aliases": ["DerivedData", "deriveddata"],
+    "explanation": "Temporary files Xcode creates while building apps. Always safe to delete. Your next build will just take a little longer as Xcode rebuilds them.",
     "scope": "dev_tools"
   },
   {
@@ -1339,14 +1336,9 @@
   {
     "key": "iossimulators",
     "display_name": "iOS Simulators",
-    "tag": "medium",
-    "explanation": "Virtual iPhone and iPad devices used for app testing. Safe to delete if you are not actively testing apps, but Xcode will need to re-download them which can take a while.",
-    "bundle_ids": [],
-    "aliases": [
-      "CoreSimulator",
-      "Devices",
-      "iossimulators"
-    ],
+    "aliases": ["CoreSimulator", "Devices", "iossimulators"],
+    "tag": "safe",
+    "explanation": "Virtual iPhone and iPad devices used for app testing in Xcode. Safe to delete. Xcode will re-download them if you need them again, which may take a few minutes.",
     "scope": "dev_tools"
   },
   {

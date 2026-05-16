@@ -36,26 +36,33 @@ struct SimulatorDevice: Identifiable, Hashable {
                 reinstallCommand: nil
             )
         }
-        let sixMonthsAgo = Calendar.current.date(byAdding: .month, value: -6, to: Date()) ?? .distantPast
-        let recentlyUsed: Bool
-        if let last = lastBootedAt {
-            recentlyUsed = last >= sixMonthsAgo
-        } else {
-            recentlyUsed = false
-        }
-        if recentlyUsed {
+        let thirtyDaysAgo = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? .distantPast
+
+        guard let lastUsed = lastBootedAt else {
             return SafetyInfo(
-                level: .danger,
+                level: .safe,
                 headline: headline,
-                explanation: "This simulator was used recently. Deleting it will remove any app data installed on it.",
+                explanation: "Not used recently. Safe to delete. Xcode will re-download it if you need it again.",
                 recoverySteps: "",
                 reinstallCommand: nil
             )
         }
+
+        let level: SafetyLevel = lastUsed >= thirtyDaysAgo ? .medium : .safe
+        let monthsAgo = Calendar.current.dateComponents([.month], from: lastUsed, to: Date()).month ?? 0
+        let explanation: String
+        if monthsAgo < 1 {
+            explanation = "Used recently. Safe to delete but Xcode will re-download it if you need it again."
+        } else if monthsAgo < 3 {
+            explanation = "Used \(monthsAgo) month\(monthsAgo == 1 ? "" : "s") ago. Safe to delete. Xcode will re-download it if you need it again."
+        } else {
+            explanation = "Not used in over \(monthsAgo) months. Safe to delete. Xcode will re-download it if you need it again."
+        }
+
         return SafetyInfo(
-            level: .medium,
+            level: level,
             headline: headline,
-            explanation: "You haven't used this simulator recently. Safe to delete, but Xcode will need to recreate it if you use it again.",
+            explanation: explanation,
             recoverySteps: "",
             reinstallCommand: nil
         )

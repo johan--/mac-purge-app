@@ -81,6 +81,12 @@ struct AppCachesView: View {
         eligibleSelectIndices.filter { items[$0].isSelected }.count
     }
 
+    private var selectedInScopeBytes: Int64 {
+        eligibleSelectIndices
+            .filter { items[$0].isSelected }
+            .reduce(Int64(0)) { sum, index in sum + items[index].sizeBytes }
+    }
+
     private var displayableItemCount: Int {
         items.filter { SafetyFilter.all.matches($0.safetyInfo) }.count
     }
@@ -93,8 +99,42 @@ struct AppCachesView: View {
         visibleIndices.reduce(Int64(0)) { sum, index in sum + items[index].sizeBytes }
     }
 
+    private var pageSubtitle: String {
+        if isLoading {
+            return "Scanning application cache folders."
+        }
+        return "\(displayableItemCount) items · \(formatBytes(totalSize)) recoverable"
+    }
+
     var body: some View {
         VStack(spacing: 0) {
+            AppPageHeader(
+                title: "App Caches",
+                subtitle: pageSubtitle
+            ) {
+                HStack(spacing: AppStyle.Spacing.xSmall) {
+                    if selectedInScopeCount > 0 {
+                        Button {
+                            Task {
+                                await store.presentDeletionSheetResolvingGit(candidates: store.selectedGeneralDeletionCandidates)
+                            }
+                        } label: {
+                            Label("Clean \(selectedInScopeCount)", systemImage: "trash")
+                                .labelStyle(.titleAndIcon)
+                        }
+                        .buttonStyle(AppButtonStyle(variant: .filled))
+                        .disabled(store.isDeleting)
+                    }
+
+                    Button(action: onScan) {
+                        Label("Scan", systemImage: "arrow.clockwise")
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .buttonStyle(AppButtonStyle(variant: .bordered))
+                    .keyboardShortcut("r", modifiers: [.command])
+                }
+            }
+
             FilterSortToolbar(
                 safetyFilter: safetyFilterBinding,
                 sortOption: sortOptionBinding,
@@ -110,7 +150,6 @@ struct AppCachesView: View {
                 showsControlsRow: false
             )
             .padding(.horizontal)
-            .padding(.top, filterToolbarTopPadding)
             .opacity(isLoading ? 0.4 : 1.0)
             .disabled(isLoading)
 
@@ -121,16 +160,10 @@ struct AppCachesView: View {
                 .fixedSize()
                 .disabled(isLoading || eligibleSelectIndices.isEmpty)
                 Spacer()
-                Picker("Sort", selection: sortOptionBinding) {
-                    ForEach(SortOption.allCases) { option in
-                        Text(option.displayName).tag(option)
-                    }
-                }
-                .pickerStyle(.menu)
-                .fixedSize()
+                AppSortMenu(selection: sortOptionBinding)
             }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
+            .padding(.horizontal, AppStyle.Spacing.large)
+            .padding(.vertical, AppStyle.Spacing.xSmall)
             .opacity(isLoading ? 0.4 : 1.0)
             .disabled(isLoading)
 
@@ -171,36 +204,31 @@ struct AppCachesView: View {
                                 isUserOverride: store.userOverridePaths.contains(item.path.standardizedFileURL.path)
                             )
                             .disabled(isLoading)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
                         }
                     }
                     .listStyle(.inset)
+                    .scrollContentBackground(.hidden)
+                    .background(AppStyle.canvas)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             Divider()
 
-            HStack {
-                if isLoading {
-                    Text("Scanning…")
-                } else if currentSafetyFilter == .all {
-                    Text("\(displayableItemCount) items")
-                } else {
-                    Text("\(visibleIndices.count) of \(displayableItemCount) items")
-                }
-                Spacer()
-                if isLoading {
-                    Text("")
-                } else {
-                    Text("Total: \(formatBytes(currentSafetyFilter == .all ? totalSize : visibleTotalSize))")
-                }
-            }
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal)
-            .padding(.vertical, 8)
+            ScanStatusBar(
+                isLoading: isLoading,
+                visibleCount: visibleIndices.count,
+                totalCount: displayableItemCount,
+                isFiltered: currentSafetyFilter != .all,
+                visibleBytes: visibleTotalSize,
+                totalBytes: totalSize,
+                selectedCount: selectedInScopeCount,
+                selectedBytes: selectedInScopeBytes
+            )
         }
-        .navigationTitle("App Caches")
+        .background(AppStyle.canvas)
         .onAppear {
             if !isLoading {
                 displayedItems = items
@@ -216,20 +244,7 @@ struct AppCachesView: View {
                 displayedItems = newItems
             }
         }
-        .toolbar {
-            ToolbarItem(placement: .automatic) {
-                Button(action: onScan) {
-                    Label("Scan", systemImage: "arrow.clockwise")
-                        .labelStyle(.titleAndIcon)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                }
-                .keyboardShortcut("r", modifiers: [.command])
-            }
-        }
     }
-
-    private var filterToolbarTopPadding: CGFloat { 8 }
 
     private func reinstallDisplay(for item: CacheItem) -> ReinstallSafetyStatus? {
         guard item.reinstallSafety != .notApplicable else { return nil }

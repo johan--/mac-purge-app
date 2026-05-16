@@ -11,6 +11,8 @@ struct ScanListSkeletonPlaceholder: View {
             }
         }
         .listStyle(.inset)
+        .scrollContentBackground(.hidden)
+        .background(AppStyle.canvas)
     }
 
     private func skeletonRow(index: Int) -> some View {
@@ -19,32 +21,40 @@ struct ScanListSkeletonPlaceholder: View {
         let secondaryWidth: CGFloat = 80 + CGFloat((index * 13) % 41)
         let trailingWidth: CGFloat = 52 + CGFloat((index * 11) % 24)
 
-        return HStack(alignment: .center, spacing: 10) {
+        return HStack(alignment: .center, spacing: 8) {
             Circle()
-                .fill(Color.secondary.opacity(0.2))
-                .frame(width: 8, height: 8)
+                .fill(Color.secondary.opacity(0.16))
+                .frame(width: 5, height: 5)
 
-            RoundedRectangle(cornerRadius: 6)
-                .fill(Color.secondary.opacity(0.2))
-                .frame(width: 24, height: 24)
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color.secondary.opacity(0.14))
+                .frame(width: 18, height: 18)
 
-            VStack(alignment: .leading, spacing: 6) {
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.secondary.opacity(0.2))
-                    .frame(width: primaryWidth, height: 14)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.secondary.opacity(0.2))
+                        .frame(width: primaryWidth, height: 12)
+
+                    Spacer()
+
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.secondary.opacity(0.15))
+                        .frame(width: trailingWidth, height: 10)
+                }
 
                 RoundedRectangle(cornerRadius: 4)
                     .fill(Color.secondary.opacity(0.15))
-                    .frame(width: secondaryWidth, height: 10)
+                    .frame(width: secondaryWidth, height: 9)
             }
 
-            Spacer()
-
-            RoundedRectangle(cornerRadius: 4)
-                .fill(Color.secondary.opacity(0.2))
-                .frame(width: trailingWidth, height: 14)
+            Spacer(minLength: 0)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
+        .padding(.horizontal, AppStyle.Spacing.xSmall)
+        .frame(minHeight: AppStyle.Row.compactHeight)
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
         .shimmering()
     }
 }

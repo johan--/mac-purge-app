@@ -70,7 +70,38 @@ final class FileDeleter {
             switch decision {
             case .allow:
                 let size = scanner.calculateFolderSize(at: url)
-                if let udid = Self.coreSimulatorDeviceUDID(from: url) {
+
+                if DeletionSafetyPolicy.shouldDeleteContentsOnly(url) {
+                    var contentsFreed: Int64 = 0
+                    var contentsDeleted: [DeletedItem] = []
+
+                    if let contents = try? FileManager.default.contentsOfDirectory(
+                        at: url,
+                        includingPropertiesForKeys: nil,
+                        options: [.skipsHiddenFiles]
+                    ) {
+                        for contentURL in contents {
+                            let contentSize = scanner.calculateFolderSize(at: contentURL)
+                            do {
+                                try FileManager.default.removeItem(at: contentURL)
+                                contentsFreed += contentSize
+                                contentsDeleted.append(DeletedItem(
+                                    path: contentURL.path,
+                                    sizeBytes: contentSize,
+                                    displayName: friendlyTitle ?? contentURL.lastPathComponent
+                                ))
+                            } catch {
+                                failedItems.append(FailedDeletionItem(
+                                    path: contentURL.path,
+                                    reason: error.localizedDescription
+                                ))
+                            }
+                        }
+                    }
+
+                    totalDeleted += contentsFreed
+                    deletedItems.append(contentsOf: contentsDeleted)
+                } else if let udid = Self.coreSimulatorDeviceUDID(from: url) {
                     switch Self.deleteCoreSimulatorDevice(udid: udid) {
                     case .success:
                         totalDeleted += size

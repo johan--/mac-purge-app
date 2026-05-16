@@ -391,6 +391,19 @@ struct DevToolsView: View {
         return toolIx + pairSelected + simSelected
     }
 
+    private var selectedInScopeBytes: Int64 {
+        let toolBytes = eligibleStandardToolIndices()
+            .filter { store.devTools[$0].isSelected }
+            .reduce(Int64(0)) { sum, index in sum + store.devTools[index].sizeBytes }
+        let projectBytes = eligibleProjectArtifactPairs()
+            .filter { store.projectGroups[$0.0].artifacts[$0.1].isSelected }
+            .reduce(Int64(0)) { sum, pair in sum + store.projectGroups[pair.0].artifacts[pair.1].sizeBytes }
+        let simulatorBytes = visibleSimulatorIndices()
+            .filter { store.simulatorDevices[$0].isSelected }
+            .reduce(Int64(0)) { sum, index in sum + (store.simulatorDevices[index].sizeOnDisk ?? 0) }
+        return toolBytes + projectBytes + simulatorBytes
+    }
+
     private func developerSafetySnapshotsForChipRow() -> [SafetyInfo] {
         let tools = isLoading ? displayedDevTools : store.devTools
         let groups = isLoading ? displayedProjectGroups : store.projectGroups
@@ -476,8 +489,44 @@ struct DevToolsView: View {
         return sum
     }
 
+    private var pageSubtitle: String {
+        if isLoading {
+            return "Scanning developer tool folders and project artifacts."
+        }
+        return "\(developerTotalRowCount) items · \(formatBytes(developerTotalByteSize)) recoverable"
+    }
+
     var body: some View {
         VStack(spacing: 0) {
+            AppPageHeader(
+                title: "Dev Tools",
+                subtitle: pageSubtitle
+            ) {
+                HStack(spacing: AppStyle.Spacing.xSmall) {
+                    if selectedInScopeCount > 0 {
+                        Button {
+                            Task {
+                                await store.presentDeletionSheetResolvingGit(
+                                    candidates: store.selectedDeveloperDeletionCandidates
+                                )
+                            }
+                        } label: {
+                            Label("Clean \(selectedInScopeCount)", systemImage: "trash")
+                                .labelStyle(.titleAndIcon)
+                        }
+                        .buttonStyle(AppButtonStyle(variant: .filled))
+                        .disabled(store.isDeleting)
+                    }
+
+                    Button(action: onScan) {
+                        Label("Scan", systemImage: "arrow.clockwise")
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .buttonStyle(AppButtonStyle(variant: .bordered))
+                    .keyboardShortcut("r", modifiers: [.command])
+                }
+            }
+
             FilterSortToolbar(
                 safetyFilter: safetyFilterBinding,
                 sortOption: sortOptionBinding,
@@ -495,7 +544,6 @@ struct DevToolsView: View {
                 showsControlsRow: false
             )
             .padding(.horizontal)
-            .padding(.top, 8)
             .opacity(isLoading ? 0.4 : 1.0)
             .disabled(isLoading)
 
@@ -506,16 +554,10 @@ struct DevToolsView: View {
                 .fixedSize()
                 .disabled(isLoading || !hasEligibleSelectableRows)
                 Spacer()
-                Picker("Sort", selection: sortOptionBinding) {
-                    ForEach(SortOption.allCases) { option in
-                        Text(option.displayName).tag(option)
-                    }
-                }
-                .pickerStyle(.menu)
-                .fixedSize()
+                AppSortMenu(selection: sortOptionBinding)
             }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
+            .padding(.horizontal, AppStyle.Spacing.large)
+            .padding(.vertical, AppStyle.Spacing.xSmall)
             .opacity(isLoading ? 0.4 : 1.0)
             .disabled(isLoading)
 
@@ -535,27 +577,18 @@ struct DevToolsView: View {
 
             Divider()
 
-            HStack {
-                if isLoading {
-                    Text("Scanning…")
-                } else if currentSafetyFilter == .all {
-                    Text("\(developerTotalRowCount) items")
-                } else {
-                    Text("\(developerVisibleRowCount) of \(developerTotalRowCount) items")
-                }
-                Spacer()
-                if isLoading {
-                    Text("")
-                } else {
-                    Text("Total: \(formatBytes(currentSafetyFilter == .all ? developerTotalByteSize : developerVisibleByteSize))")
-                }
-            }
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal)
-            .padding(.vertical, 8)
+            ScanStatusBar(
+                isLoading: isLoading,
+                visibleCount: developerVisibleRowCount,
+                totalCount: developerTotalRowCount,
+                isFiltered: currentSafetyFilter != .all,
+                visibleBytes: developerVisibleByteSize,
+                totalBytes: developerTotalByteSize,
+                selectedCount: selectedInScopeCount,
+                selectedBytes: selectedInScopeBytes
+            )
         }
-        .navigationTitle("Dev Tools")
+        .background(AppStyle.canvas)
         .onAppear {
             syncDisplayedDeveloperSnapshotIfIdle()
         }
@@ -570,17 +603,6 @@ struct DevToolsView: View {
         }
         .onChange(of: store.projectGroups) { _ in
             syncDisplayedDeveloperSnapshotIfIdle()
-        }
-        .toolbar {
-            ToolbarItem(placement: .automatic) {
-                Button(action: onScan) {
-                    Label("Scan", systemImage: "arrow.clockwise")
-                        .labelStyle(.titleAndIcon)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                }
-                .keyboardShortcut("r", modifiers: [.command])
-            }
         }
     }
 
@@ -634,9 +656,13 @@ struct DevToolsView: View {
                     )
                     .disabled(!tool.isDetected)
                     .opacity(tool.isDetected ? 1 : 0.45)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
 
                 case .simulators:
                     iosSimulatorsHostRow
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                     if iosSimulatorsExpanded {
                         ForEach(sortedVisibleSimulatorIndices(), id: \.self) { si in
                             let device = store.simulatorDevices[si]
@@ -660,6 +686,8 @@ struct DevToolsView: View {
                                 allowsBulkSelection: !device.isDanger
                             )
                             .padding(.leading, 24)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
                         }
                     }
                 }
@@ -673,6 +701,8 @@ struct DevToolsView: View {
                             let isExpanded = expandedProjectRoots.contains(group.id)
 
                             projectDisclosureHeader(for: group, groupIndex: gi, isExpanded: isExpanded)
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
 
                             if isExpanded {
                                 ForEach(
@@ -712,17 +742,21 @@ struct DevToolsView: View {
                                         isUserOverride: store.userOverridePaths.contains(artifactPath.standardizedFileURL.path)
                                     )
                                     .padding(.leading, 18)
+                                    .listRowBackground(Color.clear)
+                                    .listRowSeparator(.hidden)
                                 }
                             }
                         }
                 } header: {
                     Text("Projects")
-                        .font(.caption)
+                        .font(AppStyle.Typography.metadataEmphasis)
                         .foregroundStyle(.secondary)
                 }
             }
         }
         .listStyle(.inset)
+        .scrollContentBackground(.hidden)
+        .background(AppStyle.canvas)
     }
 
     private func bindingForSimulator(id: UUID) -> Binding<Bool> {
@@ -764,8 +798,8 @@ struct DevToolsView: View {
             .frame(width: 24)
 
             Circle()
-                .fill(parentInfo.level.color)
-                .frame(width: 8, height: 8)
+                .fill(parentInfo.level == .safe ? AppStyle.safe : parentInfo.level == .danger ? AppStyle.danger : AppStyle.warning)
+                .frame(width: 6, height: 6)
 
             Image(nsImage: symbolIcon("ipad.and.iphone"))
                 .resizable()
@@ -774,18 +808,23 @@ struct DevToolsView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("iOS Simulators")
-                    .font(.headline.weight(.semibold))
+                    .font(AppStyle.Typography.rowTitle)
                 Text("Shutdown devices only — booted simulators stay hidden.")
-                    .font(.caption2)
+                    .font(AppStyle.Typography.metadata)
                     .foregroundStyle(.tertiary)
                     .lineLimit(2)
             }
             Spacer(minLength: 8)
             Text(sizeLabel)
-                .font(.subheadline.weight(.medium))
+                .font(AppStyle.Typography.rowTitle)
                 .foregroundStyle(.secondary)
+                .monospacedDigit()
         }
         .padding(.vertical, 2)
+        .padding(.horizontal, AppStyle.Spacing.xSmall)
+        .frame(minHeight: AppStyle.Row.parentHeight)
+        .background(AppStyle.elevated.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("iOS Simulators")
     }
@@ -844,25 +883,30 @@ struct DevToolsView: View {
             .frame(width: 24)
             ForEach(group.inferredTypes, id: \.self) { type in
                 Image(systemName: type.systemImageName)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(AppStyle.accent)
                     .help(type.displayName)
                     .accessibilityLabel(type.displayName)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(group.displayName)
-                    .font(.headline.weight(.semibold))
+                    .font(AppStyle.Typography.rowTitle)
                 Text(group.rootPath.path)
-                    .font(.caption2)
+                    .font(AppStyle.Typography.metadata)
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
             }
             Spacer(minLength: 8)
             Text(group.formattedTotal)
-                .font(.subheadline.weight(.medium))
+                .font(AppStyle.Typography.rowTitle)
                 .foregroundStyle(.secondary)
+                .monospacedDigit()
         }
         .padding(.vertical, 2)
+        .padding(.horizontal, AppStyle.Spacing.xSmall)
+        .frame(minHeight: AppStyle.Row.parentHeight)
+        .background(AppStyle.elevated.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous))
         .accessibilityLabel("Project \(group.displayName)")
         .accessibilityHint("Grouped dev tool cleanup targets")
     }

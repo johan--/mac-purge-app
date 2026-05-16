@@ -90,6 +90,7 @@ enum DeletionSafetyPolicy {
             "\(home)/.pub-cache",
             "\(home)/Library/Application Support/MobileSync/Backup",
             "\(home)/Library/Logs",
+            "\(home)/Library/Logs/DiagnosticReports",
             "\(home)/.m2/repository",
             "\(home)/.gem",
             "\(home)/.bundle/cache",
@@ -119,8 +120,24 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/Application Support/discord/Code Cache",
             "\(home)/Library/Application Support/Notion/Cache",
             "\(home)/Library/Application Support/Figma/Cache",
+            "\(home)/Library/Containers/com.docker.docker",
             "\(home)/.vagrant.d/boxes"
         ]
+    }
+
+    /// Paths where only children may be removed; the directory itself must remain.
+    nonisolated static func contentsOnlyPrefixes(home: String) -> [String] {
+        [
+            "\(home)/Library/Logs",
+            "\(home)/Library/Logs/DiagnosticReports",
+            "\(home)/Library/Caches"
+        ]
+    }
+
+    nonisolated static func shouldDeleteContentsOnly(_ url: URL) -> Bool {
+        let path = url.standardizedFileURL.path
+        let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+        return contentsOnlyPrefixes(home: home).contains(path)
     }
 
     nonisolated static func evaluate(_ url: URL) -> DeletionSafetyDecision {

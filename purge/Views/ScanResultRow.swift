@@ -35,7 +35,21 @@ struct ScanResultRow: View {
     }
 
     private var statusColor: Color {
-        safetyInfo.level.color
+        switch safetyInfo.level {
+        case .safe: return AppStyle.safe
+        case .medium: return AppStyle.warning
+        case .danger: return AppStyle.danger
+        case .unknown: return AppStyle.neutral
+        }
+    }
+
+    private var statusTone: AppBadge.Tone {
+        switch safetyInfo.level {
+        case .safe: return .safe
+        case .medium: return .warning
+        case .danger: return .danger
+        case .unknown: return .neutral
+        }
     }
 
     private var popoverStatusColor: Color {
@@ -121,15 +135,26 @@ struct ScanResultRow: View {
         .contextMenu {
             rowContextMenu
         }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 6)
-        .background(isHoveringRow ? Color.primary.opacity(0.06) : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(.vertical, 2)
+        .padding(.horizontal, AppStyle.Spacing.xSmall)
+        .frame(minHeight: AppStyle.Row.compactHeight)
+        .background(rowBackground)
+        .overlay {
+            RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
+                .stroke(isSelected ? AppStyle.selectionStroke : Color.clear)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous))
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.16)) {
                 isHoveringRow = hovering
             }
         }
+    }
+
+    private var rowBackground: Color {
+        if isSelected { return AppStyle.selectionFill }
+        if isHoveringRow { return AppStyle.rowHover }
+        return .clear
     }
 
     @ViewBuilder
@@ -172,73 +197,39 @@ struct ScanResultRow: View {
 
     /// Dot, icon, labels, size — hover popover attaches here so the checkbox column stays fully clickable.
     private var rowMainContent: some View {
-        HStack(alignment: .center, spacing: 10) {
+        HStack(alignment: .center, spacing: 8) {
             Circle()
                 .fill(statusColor)
-                .frame(width: 8, height: 8)
+                .frame(width: 5, height: 5)
 
             Image(nsImage: resolvedIcon)
                 .resizable()
-                .frame(width: 24, height: 24)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .frame(width: 18, height: 18)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .opacity(0.88)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(primaryLabel)
-                    .font(.headline.weight(.semibold))
-                if let dateModifiedLine {
-                    Text(dateModifiedLine)
-                        .font(.caption)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(primaryLabel)
+                        .font(AppStyle.Typography.rowTitle)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    Text(formattedSize)
+                        .font(AppStyle.Typography.metadataEmphasis)
                         .foregroundStyle(.secondary)
+                        .monospacedDigit()
                 }
-                if isUserOverride {
-                    userOverrideBadge
-                }
-                if let detailCaption {
-                    Text(detailCaption)
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.tertiary)
-                }
-                HStack(spacing: 6) {
-                    if let reinstallSafety {
-                        switch reinstallSafety {
-                        case .reinstallable:
-                            Text("✓ Can be rebuilt")
-                                .font(.caption2.weight(.medium))
-                                .foregroundStyle(Color.green.opacity(0.95))
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 3)
-                                .background(Color.green.opacity(0.15))
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                        case .missingLockfile:
-                            Text("⚠ Check support files")
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(Color.orange)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 3)
-                                .background(Color.orange.opacity(0.14))
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                        case .notApplicable:
-                            EmptyView()
-                        }
+
+                HStack(alignment: .center, spacing: 6) {
+                    if let dateModifiedLine {
+                        Text(dateModifiedLine)
+                            .font(AppStyle.Typography.metadata)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
                     }
-                    if showUncommittedRepoChanges {
-                        Text("Unfinished local changes nearby")
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(Color.orange)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 3)
-                            .background(Color.orange.opacity(0.12))
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
-                    }
+                    statusBadges
                 }
             }
-
-            Spacer(minLength: 8)
-
-            Text(formattedSize)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.primary)
-                .multilineTextAlignment(.trailing)
         }
         .onHover { hovering in
             hoverPopoverWorkItem?.cancel()
@@ -276,24 +267,42 @@ struct ScanResultRow: View {
     }
 
     @ViewBuilder
-    private var userOverrideBadge: some View {
-        HStack(spacing: 4) {
-            Text("You categorized this")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            if let onResetToAutomatic {
-                Text("·")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                Button("Reset to automatic") {
-                    onResetToAutomatic()
-                }
-                .buttonStyle(.plain)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(Color.accentColor)
+    private var statusBadges: some View {
+        AppBadge(text: statusLabel, tone: statusTone)
+        if isUserOverride {
+            userOverrideBadge
+        }
+        if let detailCaption {
+            AppBadge(text: detailCaption, tone: .neutral)
+        }
+        if let reinstallSafety {
+            switch reinstallSafety {
+            case .reinstallable:
+                AppBadge(text: "Can be rebuilt", tone: .safe)
+            case .missingLockfile:
+                AppBadge(text: "Check support files", tone: .warning)
+            case .notApplicable:
+                EmptyView()
             }
         }
-        .accessibilityElement(children: .combine)
+        if showUncommittedRepoChanges {
+            AppBadge(text: "Local changes nearby", tone: .warning)
+        }
+    }
+
+    @ViewBuilder
+    private var userOverrideBadge: some View {
+        if let onResetToAutomatic {
+            Button {
+                onResetToAutomatic()
+            } label: {
+                AppBadge(text: "Manual category", tone: .accent)
+            }
+            .buttonStyle(.plain)
+            .help("Reset to automatic")
+        } else {
+            AppBadge(text: "Manual category", tone: .accent)
+        }
     }
 
     private var controlColumn: some View {

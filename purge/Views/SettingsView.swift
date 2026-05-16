@@ -38,6 +38,7 @@ struct SettingsView: View {
             .padding(.vertical, 24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .background(AppStyle.canvas)
         .navigationTitle("Settings")
         .sheet(isPresented: $showTelemetryPreviewSheet) {
             TelemetryPreviewSheet(
