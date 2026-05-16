@@ -20,6 +20,7 @@ enum AppStyle {
     enum Row {
         static let compactHeight: CGFloat = 36
         static let parentHeight: CGFloat = 44
+        static let listRowMinHeight: CGFloat = 52
     }
 
     enum Typography {
@@ -29,10 +30,10 @@ enum AppStyle {
         static let metadataEmphasis = Font.system(size: 11, weight: .medium)
     }
 
-    /// Product blue (Notion / macOS system blue family).
+    /// Product cobalt — saturated enough for filled buttons with white labels.
     static let accent = Color(
-        light: NSColor(calibratedRed: 0.0, green: 0.48, blue: 1.0, alpha: 1),
-        dark: NSColor(calibratedRed: 0.35, green: 0.62, blue: 1.0, alpha: 1)
+        light: NSColor(calibratedRed: 21 / 255, green: 101 / 255, blue: 216 / 255, alpha: 1),
+        dark: NSColor(calibratedRed: 56 / 255, green: 136 / 255, blue: 244 / 255, alpha: 1)
     )
     static let selectionFill = accent.opacity(0.07)
     static let selectionStroke = accent.opacity(0.18)

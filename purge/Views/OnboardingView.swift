@@ -440,36 +440,14 @@ struct OnboardingView: View {
 
 private struct OnboardingScanRowMock: View {
     var body: some View {
-        HStack(spacing: AppStyle.Spacing.small) {
-            Image(systemName: "folder.fill")
-                .font(.system(size: 20))
-                .foregroundStyle(.secondary)
-                .frame(width: 28, height: 28)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Xcode DerivedData")
-                    .font(AppStyle.Typography.rowTitle)
-                Text("Build artifacts Xcode can recreate")
-                    .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: AppStyle.Spacing.xSmall)
-
-            Text("4.2 GB")
-                .font(AppStyle.Typography.metadata)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-
-            AppBadge(text: "Safe to Clean", tone: .safe)
-        }
-        .padding(.horizontal, AppStyle.Spacing.small)
-        .padding(.vertical, 10)
-        .background(AppStyle.elevated, in: RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
-                .stroke(AppStyle.hairline)
-        }
+        ScanListRow(
+            icon: .symbol("folder.fill"),
+            title: "Xcode DerivedData",
+            subtitle: "Build artifacts Xcode can recreate",
+            formattedSize: "4.2 GB",
+            primaryBadgeText: "Safe to Clean",
+            primaryBadgeTone: .safe
+        )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Example scan row: Xcode DerivedData, 4.2 gigabytes, Safe to Clean")
     }

@@ -20,6 +20,11 @@ struct SettingsView: View {
     var body: some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 28) {
+                Text("Settings")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, settingsHorizontalContentInset)
+
                 cleaningScheduleSection
                     .padding(.horizontal, settingsHorizontalContentInset)
 
@@ -35,11 +40,10 @@ struct SettingsView: View {
                 .padding(.horizontal, settingsHorizontalContentInset)
             }
             .frame(maxWidth: settingsContentMaxWidth, alignment: .leading)
-            .padding(.vertical, 24)
+            .padding(.vertical, AppDetailPageLayout.verticalPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(AppStyle.canvas)
-        .navigationTitle("Settings")
         .sheet(isPresented: $showTelemetryPreviewSheet) {
             TelemetryPreviewSheet(
                 payload: TelemetryService.makePayload(from: store),
@@ -134,7 +138,7 @@ struct SettingsView: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(Color.accentColor)
+                .tint(AppStyle.accent)
                 .disabled(isTelemetrySendDisabled)
             }
 
@@ -410,7 +414,7 @@ struct SettingsView: View {
     /// Caps line length on wide windows; layout still shrinks with a narrow split-view column.
     private var settingsContentMaxWidth: CGFloat { 560 }
 
-    private var settingsHorizontalContentInset: CGFloat { 24 }
+    private var settingsHorizontalContentInset: CGFloat { AppDetailPageLayout.horizontalInset }
 
     private var scheduleSummary: String {
         """
@@ -536,7 +540,7 @@ private struct TelemetryPreviewSheet: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(Color.accentColor)
+                .tint(AppStyle.accent)
                 .keyboardShortcut(.defaultAction)
                 .disabled(isSendDisabled)
             }

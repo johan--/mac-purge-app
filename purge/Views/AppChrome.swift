@@ -1,4 +1,58 @@
+import AppKit
 import SwiftUI
+
+struct AppBrandMark: View {
+    var iconSize: CGFloat = 22
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(nsImage: NSApplication.shared.applicationIconImage)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: iconSize, height: iconSize)
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+
+            Text("Purge")
+                .font(.system(size: 14, weight: .semibold))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Purge")
+    }
+}
+
+/// Shared horizontal inset for Settings-style detail pages (App Caches, Dev Tools, Settings).
+enum AppDetailPageLayout {
+    static let horizontalInset: CGFloat = 24
+    static let verticalPadding: CGFloat = 24
+}
+
+/// Page header matching Settings section typography (`.headline` + subtitle).
+struct AppSectionPageHeader<Trailing: View>: View {
+    let title: String
+    let subtitle: String
+    @ViewBuilder var trailing: () -> Trailing
+
+    var body: some View {
+        HStack(alignment: .center, spacing: AppStyle.Spacing.medium) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: AppStyle.Spacing.small)
+
+            trailing()
+        }
+        .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+        .padding(.top, AppDetailPageLayout.verticalPadding)
+        .padding(.bottom, AppStyle.Spacing.small)
+    }
+}
 
 struct AppPageHeader<Trailing: View>: View {
     let title: String
@@ -124,6 +178,8 @@ struct AppNavRow: View {
     let isSelected: Bool
     let action: () -> Void
 
+    @State private var isHovering = false
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: AppStyle.Spacing.xSmall) {
@@ -132,25 +188,29 @@ struct AppNavRow: View {
                     .frame(width: 16)
                     .foregroundStyle(isSelected ? AppStyle.accent : .secondary)
                 Text(title)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
                     .lineLimit(1)
                 Spacer(minLength: AppStyle.Spacing.xSmall)
             }
             .foregroundStyle(isSelected ? Color.primary : Color.secondary)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(isSelected ? AppStyle.selectionFill : Color.clear)
-            .overlay {
-                if isSelected {
-                    RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
-                        .stroke(AppStyle.selectionStroke)
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous))
+            .background(navBackground, in: RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private var navBackground: Color {
+        if isSelected {
+            return AppStyle.accent.opacity(0.12)
+        }
+        if isHovering {
+            return AppStyle.rowHover
+        }
+        return .clear
     }
 }
 

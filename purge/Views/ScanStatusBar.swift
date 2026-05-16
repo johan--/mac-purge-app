@@ -22,41 +22,42 @@ struct ScanStatusBar: View {
     }
 
     var body: some View {
-        HStack(spacing: 8) {
+        Group {
             if isLoading {
-                ProgressView()
-                    .controlSize(.small)
-                Text("Scanning…")
-                    .foregroundStyle(.secondary)
+                ScanStatusBarSkeleton(showsSelectedSummary: selectedCount > 0)
             } else {
-                Text(itemCountLabel)
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                loadedStatusBar
+            }
+        }
+    }
 
-                if selectedCount > 0 {
-                    separator
-                    Text("\(selectedCount) selected")
-                        .fontWeight(.medium)
-                        .monospacedDigit()
-                        .foregroundStyle(.primary)
-                }
+    private var loadedStatusBar: some View {
+        HStack(spacing: 8) {
+            Text(itemCountLabel)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+
+            if selectedCount > 0 {
+                separator
+                Text("\(selectedCount) selected")
+                    .fontWeight(.medium)
+                    .monospacedDigit()
+                    .foregroundStyle(.primary)
             }
 
             Spacer(minLength: 12)
 
-            if !isLoading {
-                if selectedCount > 0 {
-                    Text("\(formatBytes(selectedBytes)) selected")
-                        .fontWeight(.medium)
-                        .monospacedDigit()
-                        .foregroundStyle(.primary)
-                    separator
-                }
-
-                Text("\(formatBytes(displayedBytes)) total")
+            if selectedCount > 0 {
+                Text("\(formatBytes(selectedBytes)) selected")
+                    .fontWeight(.medium)
                     .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary)
+                separator
             }
+
+            Text("\(formatBytes(displayedBytes)) total")
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
         }
         .font(.footnote)
         .padding(.horizontal)

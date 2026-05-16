@@ -22,14 +22,16 @@ struct ContentView: View {
         NavigationSplitView {
             sidebar
         } detail: {
-            if store.hasFullDiskAccess {
-                tabContent
-                    .frame(minWidth: 600, minHeight: 400)
-            } else {
-                PermissionPromptView {
-                    store.refreshPermission()
-                    if store.hasFullDiskAccess && !isRunningPreview {
-                        Task { await store.scanAll() }
+            Group {
+                if store.hasFullDiskAccess {
+                    tabContent
+                        .frame(minWidth: 600, minHeight: 400)
+                } else {
+                    PermissionPromptView {
+                        store.refreshPermission()
+                        if store.hasFullDiskAccess && !isRunningPreview {
+                            Task { await store.scanAll() }
+                        }
                     }
                 }
             }
@@ -174,15 +176,9 @@ struct ContentView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Purge")
-                        .font(.system(size: 15, weight: .semibold))
-                    Text("Local cleanup")
-                        .font(AppStyle.Typography.metadata)
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(.horizontal, 10)
-                .padding(.top, AppStyle.Spacing.medium)
+                AppBrandMark()
+                    .padding(.horizontal, 10)
+                    .padding(.top, AppStyle.Spacing.medium)
 
                 VStack(spacing: 2) {
                     ForEach(PurgeStore.Tab.allCases) { tab in
@@ -227,7 +223,7 @@ struct ContentView: View {
         }
         .frame(minWidth: 200, idealWidth: 220, maxWidth: 280)
         .background(AppStyle.panel)
-        .navigationTitle("Purge")
+        .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 280)
     }
 
     @ViewBuilder
@@ -240,12 +236,12 @@ struct ContentView: View {
             case .appCaches:
                 AppCachesView(
                     items: $store.cacheItems,
-                    isLoading: store.isScanningGeneral,
+                    isLoading: store.isScanningGeneral || store.isScanningAll,
                     onScan: { Task { await store.scanGeneral() } }
                 )
             case .devTools:
                 DevToolsView(
-                    isLoading: store.isScanningDeveloper,
+                    isLoading: store.isScanningDeveloper || store.isScanningAll,
                     onScan: { Task { await store.scanDeveloper() } }
                 )
             case .settings:

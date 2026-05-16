@@ -106,9 +106,21 @@ struct AppCachesView: View {
         return "\(displayableItemCount) items · \(formatBytes(totalSize)) recoverable"
     }
 
+    private var skeletonRowCount: Int {
+        SkeletonRowCount.clamped(displayedItems.count)
+    }
+
+    private var showsListContent: Bool {
+        !isLoading && !items.isEmpty && !visibleIndices.isEmpty
+    }
+
+    private func isCacheMetadataPending(_ item: CacheItem) -> Bool {
+        store.isEnrichingGeneral && item.gitStatus == .unknown
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            AppPageHeader(
+            AppSectionPageHeader(
                 title: "App Caches",
                 subtitle: pageSubtitle
             ) {
@@ -149,8 +161,7 @@ struct AppCachesView: View {
                 useStackedLayout: true,
                 showsControlsRow: false
             )
-            .padding(.horizontal)
-            .opacity(isLoading ? 0.4 : 1.0)
+            .padding(.horizontal, AppDetailPageLayout.horizontalInset)
             .disabled(isLoading)
 
             HStack {
@@ -162,14 +173,13 @@ struct AppCachesView: View {
                 Spacer()
                 AppSortMenu(selection: sortOptionBinding)
             }
-            .padding(.horizontal, AppStyle.Spacing.large)
+            .padding(.horizontal, AppDetailPageLayout.horizontalInset)
             .padding(.vertical, AppStyle.Spacing.xSmall)
-            .opacity(isLoading ? 0.4 : 1.0)
             .disabled(isLoading)
 
             ZStack {
-                if isLoading && items.isEmpty {
-                    ScanListSkeletonPlaceholder()
+                if isLoading {
+                    ScanListSkeletonPlaceholder(rowCount: skeletonRowCount)
                 } else if items.isEmpty {
                     emptyState
                 } else if visibleIndices.isEmpty {
@@ -183,11 +193,6 @@ struct AppCachesView: View {
                                 isSelected: $items[index].isSelected,
                                 primaryLabel: item.appName,
                                 formattedSize: item.formattedSize,
-                                dateModifiedLine: DateFormatter.localizedString(
-                                    from: item.lastModified,
-                                    dateStyle: .medium,
-                                    timeStyle: .short
-                                ),
                                 safetyInfo: item.safetyInfo,
                                 icon: appIcon(for: item),
                                 onRequestUnknownDelete: item.safetyInfo.level == .unknown
@@ -201,9 +206,10 @@ struct AppCachesView: View {
                                 onMarkMedium: { store.markCacheItem(id: itemID, as: .medium) },
                                 onMarkDanger: { store.markCacheItem(id: itemID, as: .danger) },
                                 onResetToAutomatic: { store.resetCacheItemToAutomatic(id: itemID) },
-                                isUserOverride: store.userOverridePaths.contains(item.path.standardizedFileURL.path)
+                                isUserOverride: store.userOverridePaths.contains(item.path.standardizedFileURL.path),
+                                isMetadataPending: isCacheMetadataPending(item)
                             )
-                            .disabled(isLoading)
+                            .listRowInsets(ScanListRowInsets.standard)
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
                         }
@@ -211,6 +217,10 @@ struct AppCachesView: View {
                     .listStyle(.inset)
                     .scrollContentBackground(.hidden)
                     .background(AppStyle.canvas)
+                }
+
+                if store.isDeleting && showsListContent {
+                    CleaningOverlay()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -290,4 +300,42 @@ struct AppCachesView: View {
         }
         return NSWorkspace.shared.icon(forFile: item.path.path)
     }
+}
+
+#Preview("App Caches — scanning") {
+    AppCachesView(
+        items: .constant([]),
+        isLoading: true,
+        onScan: {}
+    )
+    .environmentObject(PurgeStore())
+    .frame(width: 720, height: 560)
+}
+
+#Preview("App Caches — loaded") {
+    AppCachesView(
+        items: .constant([
+            CacheItem(
+                appName: "Safari",
+                bundleID: "com.apple.Safari",
+                path: URL(fileURLWithPath: "/tmp/Safari"),
+                sizeBytes: 420_000_000,
+                lastModified: Date(),
+                isSelected: false,
+                safetyInfo: SafetyInfo(
+                    level: .safe,
+                    headline: "Safari",
+                    explanation: "Cache rebuilds on launch.",
+                    recoverySteps: "",
+                    reinstallCommand: nil
+                ),
+                reinstallSafety: .notApplicable,
+                gitStatus: .clean
+            )
+        ]),
+        isLoading: false,
+        onScan: {}
+    )
+    .environmentObject(PurgeStore())
+    .frame(width: 720, height: 560)
 }

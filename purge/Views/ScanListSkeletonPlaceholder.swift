@@ -1,8 +1,56 @@
 import SwiftUI
 
-/// List-shaped placeholder rows shown while a tab scan is in progress (empty result set).
+// MARK: - Row count
+
+enum SkeletonRowCount {
+    static let defaultCount = 8
+    static let minimum = 6
+    static let maximum = 12
+
+    static func clamped(_ count: Int, default defaultCount: Int = defaultCount) -> Int {
+        guard count > 0 else { return defaultCount }
+        return max(minimum, min(maximum, count))
+    }
+}
+
+// MARK: - Primitives
+
+enum SkeletonOpacity {
+    static let strong: Double = 0.2
+    static let medium: Double = 0.15
+    static let light: Double = 0.14
+    static let subtle: Double = 0.12
+}
+
+struct SkeletonBar: View {
+    var width: CGFloat
+    var height: CGFloat = 10
+    var cornerRadius: CGFloat = 4
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(Color.secondary.opacity(SkeletonOpacity.medium))
+            .frame(width: width, height: height)
+            .accessibilityHidden(true)
+    }
+}
+
+struct SkeletonCircle: View {
+    var diameter: CGFloat
+
+    var body: some View {
+        Circle()
+            .fill(Color.secondary.opacity(SkeletonOpacity.light))
+            .frame(width: diameter, height: diameter)
+            .accessibilityHidden(true)
+    }
+}
+
+// MARK: - List placeholder
+
+/// List-shaped placeholder rows shown while a tab scan is in progress.
 struct ScanListSkeletonPlaceholder: View {
-    var rowCount: Int = 8
+    var rowCount: Int = SkeletonRowCount.defaultCount
 
     var body: some View {
         List {
@@ -13,49 +61,137 @@ struct ScanListSkeletonPlaceholder: View {
         .listStyle(.inset)
         .scrollContentBackground(.hidden)
         .background(AppStyle.canvas)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading results")
     }
 
     private func skeletonRow(index: Int) -> some View {
-        // Deterministic widths per row (avoids layout jitter from random values).
         let primaryWidth: CGFloat = 120 + CGFloat((index * 17) % 81)
-        let secondaryWidth: CGFloat = 80 + CGFloat((index * 13) % 41)
+        let secondaryWidth: CGFloat = 140 + CGFloat((index * 13) % 60)
         let trailingWidth: CGFloat = 52 + CGFloat((index * 11) % 24)
+        let badgeWidth: CGFloat = 72 + CGFloat((index * 7) % 20)
 
-        return HStack(alignment: .center, spacing: 8) {
-            Circle()
-                .fill(Color.secondary.opacity(0.16))
-                .frame(width: 5, height: 5)
-
+        return HStack(alignment: .center, spacing: 10) {
             RoundedRectangle(cornerRadius: 4)
-                .fill(Color.secondary.opacity(0.14))
-                .frame(width: 18, height: 18)
+                .fill(Color.secondary.opacity(SkeletonOpacity.light))
+                .frame(width: 16, height: 16)
+                .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
+                HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.secondary.opacity(0.2))
-                        .frame(width: primaryWidth, height: 12)
+                        .fill(Color.secondary.opacity(SkeletonOpacity.light))
+                        .frame(width: 28, height: 28)
+                        .accessibilityHidden(true)
 
-                    Spacer()
+                    VStack(alignment: .leading, spacing: 4) {
+                        SkeletonBar(width: primaryWidth, height: 12)
+                        SkeletonBar(width: secondaryWidth, height: 9)
+                    }
 
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.secondary.opacity(0.15))
-                        .frame(width: trailingWidth, height: 10)
+                    Spacer(minLength: AppStyle.Spacing.xSmall)
+
+                    SkeletonBar(width: trailingWidth, height: 10)
+                    SkeletonBar(width: badgeWidth, height: 18, cornerRadius: AppStyle.Radius.chip)
                 }
-
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.secondary.opacity(0.15))
-                    .frame(width: secondaryWidth, height: 9)
             }
-
-            Spacer(minLength: 0)
         }
-        .padding(.vertical, 2)
-        .padding(.horizontal, AppStyle.Spacing.xSmall)
-        .frame(minHeight: AppStyle.Row.compactHeight)
+        .padding(.horizontal, AppStyle.Spacing.small)
+        .padding(.vertical, 10)
+        .frame(minHeight: AppStyle.Row.listRowMinHeight, alignment: .leading)
+        .background(AppStyle.elevated, in: RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
+                .stroke(AppStyle.hairline)
+        }
+        .listRowInsets(ScanListRowInsets.standard)
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
         .shimmering()
+    }
+}
+
+// MARK: - Filter chips
+
+struct FilterChipSkeletonRow: View {
+    var chipCount: Int = SafetyFilter.allCases.count
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                ForEach(0..<chipCount, id: \.self) { index in
+                    let width: CGFloat = 64 + CGFloat((index * 11) % 36)
+                    SkeletonBar(width: width, height: 26, cornerRadius: AppStyle.Radius.chip)
+                        .shimmering()
+                }
+            }
+            .padding(.vertical, 2)
+        }
+        .frame(maxWidth: .infinity, minHeight: 34, maxHeight: 34, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading filters")
+    }
+}
+
+// MARK: - Status bar
+
+struct ScanStatusBarSkeleton: View {
+    var showsSelectedSummary: Bool = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            SkeletonBar(width: 88, height: 10)
+            if showsSelectedSummary {
+                Text("·")
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+                SkeletonBar(width: 72, height: 10)
+            }
+
+            Spacer(minLength: 12)
+
+            if showsSelectedSummary {
+                SkeletonBar(width: 64, height: 10)
+                Text("·")
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+            SkeletonBar(width: 76, height: 10)
+        }
+        .font(.footnote)
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(AppStyle.canvas)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(AppStyle.hairline)
+                .frame(height: 1)
+        }
+        .shimmering()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading scan summary")
+    }
+}
+
+// MARK: - Deletion overlay
+
+struct CleaningOverlay: View {
+    var message: String = "Cleaning…"
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+            VStack(spacing: 10) {
+                ProgressView()
+                    .controlSize(.regular)
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(message)
     }
 }
 

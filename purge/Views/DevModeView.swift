@@ -11,6 +11,7 @@ struct DevToolsView: View {
     /// Last completed dev scan; stabilizes chip counts during an in-flight rescan.
     @State private var displayedDevTools: [DevTool] = []
     @State private var displayedProjectGroups: [ProjectGroup] = []
+    @State private var displayedSimulatorDevices: [SimulatorDevice] = []
 
     /// Stable list IDs so sibling `ForEach` loops in the same `List` never share
     /// bare `Int` identities (which can duplicate or swap rows on expand/collapse).
@@ -266,14 +267,6 @@ struct DevToolsView: View {
         visibleSimulatorIndices().filter { store.simulatorDevices[$0].safetyInfo.level == .safe }
     }
 
-    private func simulatorSubtitle(_ device: SimulatorDevice) -> String {
-        if !device.isAvailable { return "Unavailable — runtime not installed" }
-        guard let date = device.lastBootedAt else { return "Never used" }
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .full
-        return "Last used \(formatter.localizedString(for: date, relativeTo: Date()))"
-    }
-
     private func isEligibleForManualBulkSelection(_ info: SafetyInfo) -> Bool {
         true
     }
@@ -407,7 +400,7 @@ struct DevToolsView: View {
     private func developerSafetySnapshotsForChipRow() -> [SafetyInfo] {
         let tools = isLoading ? displayedDevTools : store.devTools
         let groups = isLoading ? displayedProjectGroups : store.projectGroups
-        let sims = isLoading ? [] : store.simulatorDevices
+        let sims = isLoading ? displayedSimulatorDevices : store.simulatorDevices
         var infos: [SafetyInfo] = tools.filter(\.isDetected).map(\.safetyInfo)
         for group in groups {
             for art in group.artifacts {
@@ -430,7 +423,40 @@ struct DevToolsView: View {
     }
 
     private var developerListEmpty: Bool {
-        store.projectGroups.isEmpty && store.devTools.isEmpty && store.simulatorDevices.isEmpty
+        if isLoading {
+            return displayedDevTools.isEmpty
+                && displayedProjectGroups.isEmpty
+                && displayedSimulatorDevices.isEmpty
+        }
+        return store.projectGroups.isEmpty
+            && store.devTools.isEmpty
+            && store.simulatorDevices.isEmpty
+    }
+
+    private var skeletonRowCount: Int {
+        let tools = displayedDevTools.filter(\.isDetected).count
+        let artifacts = displayedProjectGroups.reduce(0) { $0 + $1.artifacts.count }
+        let sims = displayedSimulatorDevices.count
+        return SkeletonRowCount.clamped(tools + artifacts + sims)
+    }
+
+    private var showsDeveloperListContent: Bool {
+        !isLoading && !developerListEmpty && !nothingMatchesFilter
+    }
+
+    private func isDevToolMetadataPending(_ tool: DevTool) -> Bool {
+        guard store.isEnrichingDeveloper else { return false }
+        return tool.paths.contains {
+            store.devToolRepoStatusByPath[$0.standardizedFileURL.path] == nil
+        }
+    }
+
+    private func isArtifactMetadataPending(_ artifact: ProjectCacheArtifact) -> Bool {
+        store.isEnrichingDeveloper && artifact.gitStatus == .unknown
+    }
+
+    private func isSimulatorMetadataPending(_ device: SimulatorDevice) -> Bool {
+        store.isEnrichingDeveloper && device.sizeOnDisk == nil
     }
 
     private var nothingMatchesFilter: Bool {
@@ -498,7 +524,7 @@ struct DevToolsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            AppPageHeader(
+            AppSectionPageHeader(
                 title: "Dev Tools",
                 subtitle: pageSubtitle
             ) {
@@ -543,8 +569,7 @@ struct DevToolsView: View {
                 useStackedLayout: true,
                 showsControlsRow: false
             )
-            .padding(.horizontal)
-            .opacity(isLoading ? 0.4 : 1.0)
+            .padding(.horizontal, AppDetailPageLayout.horizontalInset)
             .disabled(isLoading)
 
             HStack {
@@ -556,21 +581,23 @@ struct DevToolsView: View {
                 Spacer()
                 AppSortMenu(selection: sortOptionBinding)
             }
-            .padding(.horizontal, AppStyle.Spacing.large)
+            .padding(.horizontal, AppDetailPageLayout.horizontalInset)
             .padding(.vertical, AppStyle.Spacing.xSmall)
-            .opacity(isLoading ? 0.4 : 1.0)
             .disabled(isLoading)
 
             ZStack {
-                if isLoading && developerListEmpty {
-                    ScanListSkeletonPlaceholder()
-                } else if !isLoading && developerListEmpty {
+                if isLoading {
+                    ScanListSkeletonPlaceholder(rowCount: skeletonRowCount)
+                } else if developerListEmpty {
                     placeholderNoData
-                } else if nothingMatchesFilter && !developerListEmpty {
+                } else if nothingMatchesFilter {
                     emptyFilterState
                 } else {
                     developerListOnly
-                        .disabled(isLoading)
+                }
+
+                if store.isDeleting && showsDeveloperListContent {
+                    CleaningOverlay()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -594,8 +621,7 @@ struct DevToolsView: View {
         }
         .onChange(of: isLoading) { scanning in
             if !scanning {
-                displayedDevTools = store.devTools
-                displayedProjectGroups = store.projectGroups
+                syncDisplayedDeveloperSnapshotFromStore()
             }
         }
         .onChange(of: store.devTools) { _ in
@@ -604,12 +630,20 @@ struct DevToolsView: View {
         .onChange(of: store.projectGroups) { _ in
             syncDisplayedDeveloperSnapshotIfIdle()
         }
+        .onChange(of: store.simulatorDevices) { _ in
+            syncDisplayedDeveloperSnapshotIfIdle()
+        }
     }
 
     private func syncDisplayedDeveloperSnapshotIfIdle() {
         guard !isLoading else { return }
+        syncDisplayedDeveloperSnapshotFromStore()
+    }
+
+    private func syncDisplayedDeveloperSnapshotFromStore() {
         displayedDevTools = store.devTools
         displayedProjectGroups = store.projectGroups
+        displayedSimulatorDevices = store.simulatorDevices
     }
 
     private var placeholderNoData: some View {
@@ -634,11 +668,6 @@ struct DevToolsView: View {
                         isSelected: bindingForStandardTool(index),
                         primaryLabel: tool.safetyInfo.headline,
                         formattedSize: tool.formattedSize,
-                        dateModifiedLine: DateFormatter.localizedString(
-                            from: devToolModified(tool),
-                            dateStyle: .medium,
-                            timeStyle: .short
-                        ),
                         safetyInfo: tool.safetyInfo,
                         icon: symbolIcon(tool.iconName),
                         onRequestUnknownDelete: tool.safetyInfo.level == .unknown
@@ -646,21 +675,24 @@ struct DevToolsView: View {
                             : nil,
                         detailCaption: nil,
                         reinstallSafety: reinstallRollup(for: tool),
-                        showUncommittedRepoChanges: toolShowsUncommitted(tool),
+                        showUncommittedRepoChanges: !isDevToolMetadataPending(tool) && toolShowsUncommitted(tool),
                         onRecategorize: primaryPath != nil ? { store.recategorizeDevTool(id: toolID) } : nil,
                         onMarkSafe: primaryPath != nil ? { store.markDevTool(id: toolID, as: .safe) } : nil,
                         onMarkMedium: primaryPath != nil ? { store.markDevTool(id: toolID, as: .medium) } : nil,
                         onMarkDanger: primaryPath != nil ? { store.markDevTool(id: toolID, as: .danger) } : nil,
                         onResetToAutomatic: primaryPath != nil ? { store.resetDevToolToAutomatic(id: toolID) } : nil,
-                        isUserOverride: primaryPath.map { store.userOverridePaths.contains($0.standardizedFileURL.path) } ?? false
+                        isUserOverride: primaryPath.map { store.userOverridePaths.contains($0.standardizedFileURL.path) } ?? false,
+                        isMetadataPending: isDevToolMetadataPending(tool)
                     )
                     .disabled(!tool.isDetected)
                     .opacity(tool.isDetected ? 1 : 0.45)
+                    .listRowInsets(ScanListRowInsets.standard)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
 
                 case .simulators:
                     iosSimulatorsHostRow
+                        .listRowInsets(ScanListRowInsets.standard)
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                     if iosSimulatorsExpanded {
@@ -670,7 +702,6 @@ struct DevToolsView: View {
                                 isSelected: bindingForSimulator(id: device.id),
                                 primaryLabel: device.safetyInfo.headline,
                                 formattedSize: device.formattedSize,
-                                dateModifiedLine: simulatorSubtitle(device),
                                 safetyInfo: device.safetyInfo,
                                 icon: symbolIcon("ipad.and.iphone"),
                                 onRequestUnknownDelete: nil,
@@ -683,9 +714,11 @@ struct DevToolsView: View {
                                 onMarkDanger: nil,
                                 onResetToAutomatic: nil,
                                 isUserOverride: false,
-                                allowsBulkSelection: !device.isDanger
+                                allowsBulkSelection: !device.isDanger,
+                                isMetadataPending: isSimulatorMetadataPending(device)
                             )
                             .padding(.leading, 24)
+                            .listRowInsets(ScanListRowInsets.standard)
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
                         }
@@ -701,6 +734,7 @@ struct DevToolsView: View {
                             let isExpanded = expandedProjectRoots.contains(group.id)
 
                             projectDisclosureHeader(for: group, groupIndex: gi, isExpanded: isExpanded)
+                                .listRowInsets(ScanListRowInsets.standard)
                                 .listRowBackground(Color.clear)
                                 .listRowSeparator(.hidden)
 
@@ -717,11 +751,6 @@ struct DevToolsView: View {
                                         isSelected: bindingForArtifact(gi: gi, ai: ai),
                                         primaryLabel: art.safetyInfo.headline,
                                         formattedSize: art.formattedSize,
-                                        dateModifiedLine: DateFormatter.localizedString(
-                                            from: art.lastModified,
-                                            dateStyle: .medium,
-                                            timeStyle: .short
-                                        ),
                                         safetyInfo: art.safetyInfo,
                                         icon: NSWorkspace.shared.icon(forFileType: "public.folder"),
                                         onRequestUnknownDelete: art.safetyInfo.level == .unknown
@@ -733,15 +762,17 @@ struct DevToolsView: View {
                                             : nil,
                                         detailCaption: art.kind.rowTag,
                                         reinstallSafety: art.reinstallSafety,
-                                        showUncommittedRepoChanges: art.gitStatus == .dirty,
+                                        showUncommittedRepoChanges: !isArtifactMetadataPending(art) && art.gitStatus == .dirty,
                                         onRecategorize: { store.recategorizeProjectArtifact(groupIndex: gi, artifactIndex: ai) },
                                         onMarkSafe: { store.markProjectArtifact(groupIndex: gi, artifactIndex: ai, as: .safe) },
                                         onMarkMedium: { store.markProjectArtifact(groupIndex: gi, artifactIndex: ai, as: .medium) },
                                         onMarkDanger: { store.markProjectArtifact(groupIndex: gi, artifactIndex: ai, as: .danger) },
                                         onResetToAutomatic: { store.resetProjectArtifactToAutomatic(groupIndex: gi, artifactIndex: ai) },
-                                        isUserOverride: store.userOverridePaths.contains(artifactPath.standardizedFileURL.path)
+                                        isUserOverride: store.userOverridePaths.contains(artifactPath.standardizedFileURL.path),
+                                        isMetadataPending: isArtifactMetadataPending(art)
                                     )
                                     .padding(.leading, 18)
+                                    .listRowInsets(ScanListRowInsets.standard)
                                     .listRowBackground(Color.clear)
                                     .listRowSeparator(.hidden)
                                 }
@@ -959,7 +990,7 @@ struct DevToolsView: View {
                     .padding(.vertical, 3)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(Color.accentColor)
+            .foregroundStyle(AppStyle.accent)
             .keyboardShortcut("r", modifiers: [.command])
         }
     }
@@ -986,4 +1017,17 @@ struct DevToolsView: View {
             .withSymbolConfiguration(config)
             ?? NSWorkspace.shared.icon(forFileType: "public.folder")
     }
+}
+
+#Preview("Dev Tools — scanning") {
+    DevToolsView(isLoading: true, onScan: {})
+        .environmentObject(PurgeStore())
+        .frame(width: 720, height: 560)
+}
+
+#Preview("Dev Tools — loaded") {
+    let store = PurgeStore()
+    return DevToolsView(isLoading: false, onScan: {})
+        .environmentObject(store)
+        .frame(width: 720, height: 560)
 }

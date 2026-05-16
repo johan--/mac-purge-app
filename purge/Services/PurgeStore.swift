@@ -68,6 +68,9 @@ final class PurgeStore: ObservableObject {
     @Published private(set) var devToolRepoStatusByPath: [String: GitWorktreeStatus] = [:]
     @Published var isScanningGeneral = false
     @Published var isScanningDeveloper = false
+    @Published private(set) var isScanningAll = false
+    @Published private(set) var isEnrichingGeneral = false
+    @Published private(set) var isEnrichingDeveloper = false
     @Published var isDeleting = false
     @Published var errorMessage: String?
     @Published var showDeletionSheet = false
@@ -484,20 +487,34 @@ final class PurgeStore: ObservableObject {
             simulatorDevices = unsizedSimulators
         }
         isScanningDeveloper = false
-        if !unsizedSimulators.isEmpty {
-            Task { @MainActor in
+        let needsSizing = !unsizedSimulators.isEmpty
+        let needsGitHydration = !projectGroups.isEmpty
+        let needsToolRepoHydration = devTools.contains { !$0.paths.isEmpty }
+        guard needsSizing || needsGitHydration || needsToolRepoHydration else { return }
+
+        Task { @MainActor in
+            isEnrichingDeveloper = true
+            defer { isEnrichingDeveloper = false }
+
+            if needsSizing {
                 let sized = await devScanner.measureSimulatorFolderSizes(unsizedSimulators)
                 guard sizingGeneration == self.simulatorSizingGeneration else { return }
                 withAnimation(.easeInOut(duration: 0.2)) {
                     self.simulatorDevices = sized
                 }
             }
+            if needsGitHydration {
+                await hydrateDeveloperGitStatusesParallel()
+            }
+            if needsToolRepoHydration {
+                await hydrateDeveloperToolRepoStatusesParallel()
+            }
         }
-        await hydrateDeveloperGitStatusesParallel()
-        await hydrateDeveloperToolRepoStatusesParallel()
     }
 
     func scanAll() async {
+        isScanningAll = true
+        defer { isScanningAll = false }
         await scanGeneral()
         await scanDeveloper()
     }
@@ -631,6 +648,8 @@ final class PurgeStore: ObservableObject {
 
     private func hydrateCacheSafetyMetadataParallel() async {
         guard !cacheItems.isEmpty else { return }
+        isEnrichingGeneral = true
+        defer { isEnrichingGeneral = false }
         var copy = cacheItems
         await withTaskGroup(of: (Int, ReinstallSafetyStatus, GitWorktreeStatus).self) { group in
             for index in copy.indices {
