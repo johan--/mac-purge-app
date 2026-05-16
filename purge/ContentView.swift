@@ -106,6 +106,7 @@ struct ContentView: View {
                 hasCompletedOnboarding: $hasCompletedOnboarding,
                 onComplete: completeOnboarding
             )
+            .environmentObject(store)
             .interactiveDismissDisabled(true)
         }
         .alert(
