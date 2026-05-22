@@ -13,10 +13,6 @@ struct ContentView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @State private var showOnboarding = false
     private let isRunningPreview = ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
-    private var cleanSelectedTitle: String {
-        guard store.selectedCount > 0 else { return "Clean Selected" }
-        return "Clean Selected (\(formatBytes(store.selectedTotalBytes)))"
-    }
 
     var body: some View {
         NavigationSplitView {
@@ -35,6 +31,7 @@ struct ContentView: View {
                     }
                 }
             }
+            .detailColumnCompactTop()
         }
         .task {
             guard !isRunningPreview else { return }
@@ -53,22 +50,6 @@ struct ContentView: View {
             guard phase == .active, !isRunningPreview else { return }
             Task {
                 await ScheduledCleaningRegistrar.shared.runGracefulActivationSweepIfPastDue()
-            }
-        }
-        .toolbar {
-            if store.hasFullDiskAccess && store.selectedTab != .settings {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        store.showDeletionSheet = true
-                    } label: {
-                        Label(cleanSelectedTitle, systemImage: "trash.fill")
-                            .labelStyle(.titleAndIcon)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                    }
-                    .buttonStyle(AppButtonStyle(variant: .filled))
-                    .disabled(store.selectedCount == 0 || store.isDeleting)
-                }
             }
         }
         .sheet(isPresented: $store.showDeletionSheet) {
@@ -161,8 +142,11 @@ struct ContentView: View {
         } message: {
             Text(store.errorMessage ?? "")
         }
-        .frame(minWidth: 800, minHeight: 600)
+        .frame(width: AppWindowLayout.width)
+        .frame(minHeight: AppWindowLayout.minHeight)
+        .fixedAppWindowWidth()
         .tint(AppStyle.accent)
+        .modifier(DiskSummaryRefreshModifier())
     }
 
     private func completeOnboarding() {
@@ -175,52 +159,31 @@ struct ContentView: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
+            VStack(alignment: .leading, spacing: 0) {
                 AppBrandMark()
                     .padding(.horizontal, 10)
                     .padding(.top, AppStyle.Spacing.medium)
+                    .padding(.bottom, AppStyle.Spacing.large)
 
-                VStack(spacing: 2) {
+                VStack(alignment: .leading, spacing: 2) {
                     ForEach(PurgeStore.Tab.allCases) { tab in
                         AppNavRow(
                             title: tab.rawValue,
-                            systemImage: tab.icon,
+                            systemImage: tab.icon(selected: store.selectedTab == tab),
                             isSelected: store.selectedTab == tab,
                             action: { store.selectedTab = tab }
                         )
                     }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, AppStyle.Spacing.small)
 
             Spacer(minLength: AppStyle.Spacing.medium)
 
-            VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
-                Text("Space Freed")
-                    .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(.tertiary)
-                Text(formatBytes(store.totalRecoveredBytes))
-                    .font(.system(size: 20, weight: .semibold))
-                    .monospacedDigit()
-                Capsule(style: .continuous)
-                    .fill(AppStyle.hairline)
-                    .frame(height: 3)
-                    .overlay(alignment: .leading) {
-                        Capsule(style: .continuous)
-                            .fill(AppStyle.accent)
-                            .frame(width: 44, height: 3)
-                    }
-            }
-            .padding(AppStyle.Spacing.small)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(AppStyle.elevated)
-            .overlay {
-                RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
-                    .stroke(AppStyle.hairline)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous))
-            .padding(AppStyle.Spacing.small)
+            SidebarSummaryView()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .frame(minWidth: 200, idealWidth: 220, maxWidth: 280)
         .background(AppStyle.panel)
         .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 280)
@@ -251,9 +214,189 @@ struct ContentView: View {
     }
 }
 
+private struct DiskSummaryRefreshModifier: ViewModifier {
+    @EnvironmentObject private var store: PurgeStore
+    @EnvironmentObject private var diskStore: DiskSummaryStore
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear {
+                diskStore.refresh()
+            }
+            .onChange(of: store.isScanningGeneral) { scanning in
+                if !scanning { diskStore.refresh() }
+            }
+            .onChange(of: store.isScanningDeveloper) { scanning in
+                if !scanning { diskStore.refresh() }
+            }
+            .onChange(of: store.lastDeletionReport?.id) { _ in
+                diskStore.refresh()
+            }
+    }
+}
+
+struct SidebarSummaryView: View {
+    @EnvironmentObject var store: PurgeStore
+    @EnvironmentObject var diskStore: DiskSummaryStore
+
+    private enum SummaryFont {
+        static let label = Font.system(size: 12, weight: .medium, design: .rounded)
+        static let value = Font.system(size: 13, weight: .semibold, design: .rounded)
+        static let hint = Font.system(size: 12, weight: .regular, design: .rounded)
+        static let diskCaption = Font.system(size: 11, weight: .medium, design: .rounded)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Divider()
+
+            VStack(alignment: .leading, spacing: 10) {
+                diskBar
+
+                stats
+
+                if store.safeRecoverableBytes > 0 {
+                    cleanButton
+                }
+            }
+            .padding(.horizontal, AppStyle.Spacing.small)
+            .padding(.bottom, 14)
+            .padding(.top, 10)
+        }
+    }
+
+    private var diskBar: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.primary.opacity(0.1))
+                        .frame(height: 8)
+
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.primary.opacity(0.35))
+                        .frame(
+                            width: usedFraction * geo.size.width,
+                            height: 8
+                        )
+
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.accentColor)
+                        .frame(
+                            width: recoverableFraction * geo.size.width,
+                            height: 8
+                        )
+                        .offset(x: max(0, (usedFraction - recoverableFraction) * geo.size.width))
+                }
+            }
+            .frame(height: 8)
+
+            HStack {
+                Text(formatBytes(diskStore.usedDiskBytes) + " used")
+                    .font(SummaryFont.diskCaption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(formatBytes(diskStore.freeDiskBytes) + " free")
+                    .font(SummaryFont.diskCaption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var stats: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if store.totalRecoverableBytes > 0 {
+                statRow(
+                    symbol: SafetyLevel.safe.symbolName(filled: true),
+                    label: SafetyLevel.safe.displayName,
+                    value: formatBytes(store.safeRecoverableBytes),
+                    color: AppStyle.safe,
+                    valueColor: .primary
+                )
+
+                statRow(
+                    symbol: SafetyLevel.medium.symbolName(filled: true),
+                    label: SafetyFilter.checkFirst.displayName,
+                    value: formatBytes(store.checkFirstRecoverableBytes),
+                    color: AppStyle.warning,
+                    valueColor: .secondary
+                )
+            } else {
+                HStack {
+                    Text("Run a scan to see recoverable space")
+                        .font(SummaryFont.hint)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+
+            statRow(
+                symbol: PurgeSummarySymbol.freedSoFar(filled: true),
+                label: "Freed so far",
+                value: formatBytes(store.totalRecoveredBytes),
+                color: AppStyle.safe,
+                valueColor: AppStyle.safe
+            )
+        }
+    }
+
+    private func statRow(
+        symbol: String,
+        label: String,
+        value: String,
+        color: Color,
+        valueColor: Color
+    ) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(color)
+                .frame(width: 16, alignment: .center)
+
+            Text(label)
+                .font(SummaryFont.label)
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Text(value)
+                .font(SummaryFont.value)
+                .foregroundStyle(valueColor)
+                .monospacedDigit()
+        }
+    }
+
+    private var cleanButton: some View {
+        Button {
+            Task { await store.performManualSafeCleanNow() }
+        } label: {
+            Label("Clean Safe Items", systemImage: "sparkles")
+                .labelStyle(.titleAndIcon)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+        }
+        .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
+        .disabled(store.isDeleting)
+    }
+
+    private var usedFraction: Double {
+        guard diskStore.totalDiskBytes > 0 else { return 0 }
+        return min(1.0, Double(diskStore.usedDiskBytes) / Double(diskStore.totalDiskBytes))
+    }
+
+    private var recoverableFraction: Double {
+        guard diskStore.totalDiskBytes > 0 else { return 0 }
+        return min(
+            usedFraction,
+            Double(store.totalRecoverableBytes) / Double(diskStore.totalDiskBytes)
+        )
+    }
+}
+
 #Preview {
     ContentView()
         .environmentObject(makePreviewStore())
+        .environmentObject(DiskSummaryStore())
 }
 
 private func makePreviewStore() -> PurgeStore {

@@ -61,12 +61,12 @@ struct ScanListRow<Footer: View>: View {
 
                 Spacer(minLength: AppStyle.Spacing.xSmall)
 
-                if isTrailingMetadataPending {
+                ScanContentCrossfade(isLoading: isTrailingMetadataPending) {
                     SkeletonBar(width: 44, height: 10, cornerRadius: 4)
                         .shimmering()
                     SkeletonBar(width: 72, height: 18, cornerRadius: AppStyle.Radius.chip)
                         .shimmering()
-                } else {
+                } loaded: {
                     Text(formattedSize)
                         .font(AppStyle.Typography.metadata)
                         .foregroundStyle(.secondary)

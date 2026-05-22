@@ -33,6 +33,34 @@ enum SafetyLevel: String, CaseIterable, Codable, Hashable {
         case .unknown: return .gray
         }
     }
+
+    var symbolName: String {
+        symbolName(filled: true)
+    }
+
+    func symbolName(filled: Bool) -> String {
+        switch self {
+        case .safe: return filled ? "checkmark.circle.fill" : "checkmark.circle"
+        case .medium: return filled ? "questionmark.circle.fill" : "questionmark.circle"
+        case .danger: return filled ? "exclamationmark.triangle.fill" : "exclamationmark.triangle"
+        case .unknown: return filled ? "questionmark.circle.fill" : "questionmark.circle"
+        }
+    }
+
+    var iconColor: Color {
+        switch self {
+        case .safe: return AppStyle.safe
+        case .medium: return AppStyle.warning
+        case .danger: return AppStyle.danger
+        case .unknown: return AppStyle.neutral
+        }
+    }
+}
+
+enum PurgeSummarySymbol {
+    static func freedSoFar(filled: Bool = true) -> String {
+        filled ? "minus.circle.fill" : "minus.circle"
+    }
 }
 
 struct SafetyInfo: Hashable {

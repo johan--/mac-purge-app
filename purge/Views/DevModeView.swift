@@ -529,27 +529,8 @@ struct DevToolsView: View {
                 subtitle: pageSubtitle
             ) {
                 HStack(spacing: AppStyle.Spacing.xSmall) {
-                    if selectedInScopeCount > 0 {
-                        Button {
-                            Task {
-                                await store.presentDeletionSheetResolvingGit(
-                                    candidates: store.selectedDeveloperDeletionCandidates
-                                )
-                            }
-                        } label: {
-                            Label("Clean \(selectedInScopeCount)", systemImage: "trash")
-                                .labelStyle(.titleAndIcon)
-                        }
-                        .buttonStyle(AppButtonStyle(variant: .filled))
-                        .disabled(store.isDeleting)
-                    }
-
-                    Button(action: onScan) {
-                        Label("Scan", systemImage: "arrow.clockwise")
-                            .labelStyle(.titleAndIcon)
-                    }
-                    .buttonStyle(AppButtonStyle(variant: .bordered))
-                    .keyboardShortcut("r", modifiers: [.command])
+                    AppScanButton(action: onScan)
+                    AppCleanSelectedButton()
                 }
             }
 
@@ -586,14 +567,16 @@ struct DevToolsView: View {
             .disabled(isLoading)
 
             ZStack {
-                if isLoading {
+                ScanContentCrossfade(isLoading: isLoading) {
                     ScanListSkeletonPlaceholder(rowCount: skeletonRowCount)
-                } else if developerListEmpty {
-                    placeholderNoData
-                } else if nothingMatchesFilter {
-                    emptyFilterState
-                } else {
-                    developerListOnly
+                } loaded: {
+                    if developerListEmpty {
+                        placeholderNoData
+                    } else if nothingMatchesFilter {
+                        emptyFilterState
+                    } else {
+                        developerListOnly
+                    }
                 }
 
                 if store.isDeleting && showsDeveloperListContent {

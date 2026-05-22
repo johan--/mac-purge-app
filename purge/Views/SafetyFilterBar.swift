@@ -47,12 +47,19 @@ enum SafetyFilter: String, CaseIterable, Identifiable {
         }
     }
 
-    /// SF Symbols shown in filter chips (paired with labels for non-color cues).
-    var chipSymbolName: String {
+    func chipSymbolName(isSelected: Bool) -> String {
         switch self {
-        case .all: return "square.grid.2x2.fill"
-        case .safe: return "checkmark.shield.fill"
-        case .checkFirst: return "exclamationmark.triangle.fill"
+        case .all: return isSelected ? "square.grid.2x2.fill" : "square.grid.2x2"
+        case .safe: return SafetyLevel.safe.symbolName(filled: isSelected)
+        case .checkFirst: return SafetyLevel.medium.symbolName(filled: isSelected)
+        }
+    }
+
+    func chipIconColor(isSelected: Bool) -> Color {
+        switch self {
+        case .all: return isSelected ? AppStyle.accent : .secondary
+        case .safe: return AppStyle.safe
+        case .checkFirst: return AppStyle.warning
         }
     }
 }
@@ -250,10 +257,9 @@ struct FilterSortToolbar: View {
             select(filter)
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: filter.chipSymbolName)
+                Image(systemName: filter.chipSymbolName(isSelected: isOn))
                     .imageScale(.small)
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(isOn ? AppStyle.accent : Color.secondary)
+                    .foregroundStyle(filter.chipIconColor(isSelected: isOn))
                     .accessibilityHidden(true)
                 Text(filter.displayName)
                     .lineLimit(1)

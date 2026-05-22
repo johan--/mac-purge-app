@@ -15,11 +15,11 @@ final class PurgeStore: ObservableObject {
         case settings = "Settings"
 
         var id: String { rawValue }
-        var icon: String {
+        func icon(selected: Bool) -> String {
             switch self {
-            case .appCaches: return "internaldrive"
-            case .devTools: return "hammer"
-            case .settings: return "gearshape"
+            case .appCaches: return selected ? "internaldrive.fill" : "internaldrive"
+            case .devTools: return selected ? "hammer.fill" : "hammer"
+            case .settings: return selected ? "gearshape.fill" : "gearshape"
             }
         }
     }
@@ -122,6 +122,51 @@ final class PurgeStore: ObservableObject {
         let simTotal = simulatorDevices.reduce(Int64(0)) { $0 + ($1.sizeOnDisk ?? 0) }
         let projTotal = projectGroups.reduce(Int64(0)) { $0 + $1.totalBytes }
         return cacheTotal + toolsTotal + simTotal + projTotal
+    }
+
+    var safeRecoverableBytes: Int64 {
+        let cacheBytes = cacheItems
+            .filter { $0.safetyInfo.level == .safe }
+            .reduce(Int64(0)) { $0 + $1.sizeBytes }
+
+        let toolBytes = devTools
+            .filter { $0.isDetected && $0.safetyInfo.level == .safe }
+            .reduce(Int64(0)) { $0 + $1.sizeBytes }
+
+        let projectBytes = projectGroups
+            .flatMap(\.artifacts)
+            .filter { $0.safetyInfo.level == .safe }
+            .reduce(Int64(0)) { $0 + $1.sizeBytes }
+
+        return cacheBytes + toolBytes + projectBytes
+    }
+
+    var checkFirstRecoverableBytes: Int64 {
+        func isCheckFirst(_ level: SafetyLevel) -> Bool {
+            level == .medium || level == .danger
+        }
+
+        let cacheBytes = cacheItems
+            .filter { isCheckFirst($0.safetyInfo.level) }
+            .reduce(Int64(0)) { $0 + $1.sizeBytes }
+
+        let toolBytes = devTools
+            .filter { $0.isDetected && isCheckFirst($0.safetyInfo.level) }
+            .reduce(Int64(0)) { $0 + $1.sizeBytes }
+
+        let projectBytes = projectGroups
+            .flatMap(\.artifacts)
+            .filter { isCheckFirst($0.safetyInfo.level) }
+            .reduce(Int64(0)) { $0 + $1.sizeBytes }
+
+        return cacheBytes + toolBytes + projectBytes
+    }
+
+    var totalRecoverableBytes: Int64 {
+        let cacheBytes = cacheItems.reduce(Int64(0)) { $0 + $1.sizeBytes }
+        let toolBytes = devTools.filter(\.isDetected).reduce(Int64(0)) { $0 + $1.sizeBytes }
+        let projectBytes = projectGroups.flatMap(\.artifacts).reduce(Int64(0)) { $0 + $1.sizeBytes }
+        return cacheBytes + toolBytes + projectBytes
     }
 
     var selectedCount: Int {

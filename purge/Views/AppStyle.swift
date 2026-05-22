@@ -24,7 +24,7 @@ enum AppStyle {
     }
 
     enum Typography {
-        static let pageTitle = Font.system(size: 22, weight: .semibold)
+        static let pageTitle = Font.system(size: 24, weight: .semibold, design: .rounded)
         static let rowTitle = Font.system(size: 13, weight: .medium)
         static let metadata = Font.system(size: 11)
         static let metadataEmphasis = Font.system(size: 11, weight: .medium)

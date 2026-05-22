@@ -12,6 +12,7 @@ import UserNotifications
 @main
 struct PurgeApp: App {
     @StateObject private var store = PurgeStore()
+    @StateObject private var diskStore = DiskSummaryStore()
 
     init() {
         UNUserNotificationCenter.current().delegate = ScheduledNotificationPresentationDelegate.shared
@@ -21,12 +22,16 @@ struct PurgeApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(store)
+                .environmentObject(diskStore)
                 .onAppear {
+                    diskStore.refresh()
                     ScheduledCleaningRegistrar.shared.attach(store: store)
                 }
                 .font(.system(.body, design: .rounded))
         }
-        .defaultSize(width: 980, height: 700)
+        .defaultSize(width: AppWindowLayout.width, height: AppWindowLayout.defaultHeight)
+        .windowResizability(.contentSize)
+        .windowToolbarStyle(.unified(showsTitle: false))
         .commands {
             PurgeCommands(store: store)
         }

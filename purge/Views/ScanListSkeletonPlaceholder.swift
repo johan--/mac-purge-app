@@ -46,6 +46,28 @@ struct SkeletonCircle: View {
     }
 }
 
+// MARK: - Loading crossfade
+
+/// Crossfades between a loading placeholder and loaded content (respects Reduce Motion).
+struct ScanContentCrossfade<Loading: View, Loaded: View>: View {
+    var isLoading: Bool
+    @ViewBuilder var loading: () -> Loading
+    @ViewBuilder var loaded: () -> Loaded
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack {
+            loaded()
+                .opacity(isLoading ? 0 : 1)
+            loading()
+                .opacity(isLoading ? 1 : 0)
+                .allowsHitTesting(isLoading)
+        }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: isLoading)
+    }
+}
+
 // MARK: - List placeholder
 
 /// List-shaped placeholder rows shown while a tab scan is in progress.

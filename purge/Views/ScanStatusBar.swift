@@ -22,12 +22,10 @@ struct ScanStatusBar: View {
     }
 
     var body: some View {
-        Group {
-            if isLoading {
-                ScanStatusBarSkeleton(showsSelectedSummary: selectedCount > 0)
-            } else {
-                loadedStatusBar
-            }
+        ScanContentCrossfade(isLoading: isLoading) {
+            ScanStatusBarSkeleton(showsSelectedSummary: selectedCount > 0)
+        } loaded: {
+            loadedStatusBar
         }
     }
 

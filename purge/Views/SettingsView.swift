@@ -21,26 +21,23 @@ struct SettingsView: View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 28) {
                 Text("Settings")
-                    .font(.headline)
+                    .font(AppStyle.Typography.pageTitle)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, settingsHorizontalContentInset)
 
                 cleaningScheduleSection
-                    .padding(.horizontal, settingsHorizontalContentInset)
 
                 Divider()
 
-                VStack(alignment: .leading, spacing: 28) {
-                    telemetrySection
+                telemetrySection
 
-                    Divider()
+                Divider()
 
-                    aboutSection
-                }
-                .padding(.horizontal, settingsHorizontalContentInset)
+                aboutSection
             }
+            .padding(.horizontal, settingsHorizontalContentInset)
             .frame(maxWidth: settingsContentMaxWidth, alignment: .leading)
-            .padding(.vertical, AppDetailPageLayout.verticalPadding)
+            .padding(.top, AppDetailPageLayout.topContentInset)
+            .padding(.bottom, AppDetailPageLayout.verticalPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(AppStyle.canvas)

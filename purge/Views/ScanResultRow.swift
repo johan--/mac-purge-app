@@ -161,13 +161,15 @@ struct ScanResultRow: View {
     }
 
     private var trailingColumn: some View {
-        VStack(alignment: .trailing, spacing: 8) {
-            if isMetadataPending {
+        ScanContentCrossfade(isLoading: isMetadataPending) {
+            VStack(alignment: .trailing, spacing: 8) {
                 SkeletonBar(width: 44, height: 10, cornerRadius: 4)
                     .shimmering()
                 SkeletonBar(width: 72, height: 18, cornerRadius: AppStyle.Radius.chip)
                     .shimmering()
-            } else {
+            }
+        } loaded: {
+            VStack(alignment: .trailing, spacing: 8) {
                 Text(formattedSize)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.primary)
@@ -223,30 +225,31 @@ struct ScanResultRow: View {
         onMarkSafe != nil || onMarkMedium != nil || onMarkDanger != nil
     }
 
-    @ViewBuilder
     private var extraBadges: some View {
-        if isMetadataPending {
+        ScanContentCrossfade(isLoading: isMetadataPending) {
             SkeletonBar(width: 96, height: 16, cornerRadius: AppStyle.Radius.chip)
                 .shimmering()
-        } else {
-            if isUserOverride {
-                userOverrideBadge
-            }
-            if let detailCaption {
-                AppBadge(text: detailCaption, tone: .neutral)
-            }
-            if let reinstallSafety {
-                switch reinstallSafety {
-                case .reinstallable:
-                    AppBadge(text: "Can be rebuilt", tone: .safe)
-                case .missingLockfile:
-                    AppBadge(text: "Check support files", tone: .warning)
-                case .notApplicable:
-                    EmptyView()
+        } loaded: {
+            Group {
+                if isUserOverride {
+                    userOverrideBadge
                 }
-            }
-            if showUncommittedRepoChanges {
-                AppBadge(text: "Local changes nearby", tone: .warning)
+                if let detailCaption {
+                    AppBadge(text: detailCaption, tone: .neutral)
+                }
+                if let reinstallSafety {
+                    switch reinstallSafety {
+                    case .reinstallable:
+                        AppBadge(text: "Can be rebuilt", tone: .safe)
+                    case .missingLockfile:
+                        AppBadge(text: "Check support files", tone: .warning)
+                    case .notApplicable:
+                        EmptyView()
+                    }
+                }
+                if showUncommittedRepoChanges {
+                    AppBadge(text: "Local changes nearby", tone: .warning)
+                }
             }
         }
     }

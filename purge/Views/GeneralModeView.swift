@@ -125,25 +125,8 @@ struct AppCachesView: View {
                 subtitle: pageSubtitle
             ) {
                 HStack(spacing: AppStyle.Spacing.xSmall) {
-                    if selectedInScopeCount > 0 {
-                        Button {
-                            Task {
-                                await store.presentDeletionSheetResolvingGit(candidates: store.selectedGeneralDeletionCandidates)
-                            }
-                        } label: {
-                            Label("Clean \(selectedInScopeCount)", systemImage: "trash")
-                                .labelStyle(.titleAndIcon)
-                        }
-                        .buttonStyle(AppButtonStyle(variant: .filled))
-                        .disabled(store.isDeleting)
-                    }
-
-                    Button(action: onScan) {
-                        Label("Scan", systemImage: "arrow.clockwise")
-                            .labelStyle(.titleAndIcon)
-                    }
-                    .buttonStyle(AppButtonStyle(variant: .bordered))
-                    .keyboardShortcut("r", modifiers: [.command])
+                    AppScanButton(action: onScan)
+                    AppCleanSelectedButton()
                 }
             }
 
@@ -178,45 +161,16 @@ struct AppCachesView: View {
             .disabled(isLoading)
 
             ZStack {
-                if isLoading {
+                ScanContentCrossfade(isLoading: isLoading) {
                     ScanListSkeletonPlaceholder(rowCount: skeletonRowCount)
-                } else if items.isEmpty {
-                    emptyState
-                } else if visibleIndices.isEmpty {
-                    emptyFilterState
-                } else {
-                    List {
-                        ForEach(sortedVisibleIndices(), id: \.self) { index in
-                            let item = items[index]
-                            let itemID = item.id
-                            ScanResultRow(
-                                isSelected: $items[index].isSelected,
-                                primaryLabel: item.appName,
-                                formattedSize: item.formattedSize,
-                                safetyInfo: item.safetyInfo,
-                                icon: appIcon(for: item),
-                                onRequestUnknownDelete: item.safetyInfo.level == .unknown
-                                    ? { store.requestUnknownDeletion(PurgeStore.DeletionCandidate.forCache(item)) }
-                                    : nil,
-                                detailCaption: nil,
-                                reinstallSafety: reinstallDisplay(for: item),
-                                showUncommittedRepoChanges: item.gitStatus == .dirty,
-                                onRecategorize: { store.recategorizeCacheItem(id: itemID) },
-                                onMarkSafe: { store.markCacheItem(id: itemID, as: .safe) },
-                                onMarkMedium: { store.markCacheItem(id: itemID, as: .medium) },
-                                onMarkDanger: { store.markCacheItem(id: itemID, as: .danger) },
-                                onResetToAutomatic: { store.resetCacheItemToAutomatic(id: itemID) },
-                                isUserOverride: store.userOverridePaths.contains(item.path.standardizedFileURL.path),
-                                isMetadataPending: isCacheMetadataPending(item)
-                            )
-                            .listRowInsets(ScanListRowInsets.standard)
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
-                        }
+                } loaded: {
+                    if items.isEmpty {
+                        emptyState
+                    } else if visibleIndices.isEmpty {
+                        emptyFilterState
+                    } else {
+                        cacheResultsList
                     }
-                    .listStyle(.inset)
-                    .scrollContentBackground(.hidden)
-                    .background(AppStyle.canvas)
                 }
 
                 if store.isDeleting && showsListContent {
@@ -259,6 +213,41 @@ struct AppCachesView: View {
     private func reinstallDisplay(for item: CacheItem) -> ReinstallSafetyStatus? {
         guard item.reinstallSafety != .notApplicable else { return nil }
         return item.reinstallSafety
+    }
+
+    private var cacheResultsList: some View {
+        List {
+            ForEach(sortedVisibleIndices(), id: \.self) { index in
+                let item = items[index]
+                let itemID = item.id
+                ScanResultRow(
+                    isSelected: $items[index].isSelected,
+                    primaryLabel: item.appName,
+                    formattedSize: item.formattedSize,
+                    safetyInfo: item.safetyInfo,
+                    icon: appIcon(for: item),
+                    onRequestUnknownDelete: item.safetyInfo.level == .unknown
+                        ? { store.requestUnknownDeletion(PurgeStore.DeletionCandidate.forCache(item)) }
+                        : nil,
+                    detailCaption: nil,
+                    reinstallSafety: reinstallDisplay(for: item),
+                    showUncommittedRepoChanges: item.gitStatus == .dirty,
+                    onRecategorize: { store.recategorizeCacheItem(id: itemID) },
+                    onMarkSafe: { store.markCacheItem(id: itemID, as: .safe) },
+                    onMarkMedium: { store.markCacheItem(id: itemID, as: .medium) },
+                    onMarkDanger: { store.markCacheItem(id: itemID, as: .danger) },
+                    onResetToAutomatic: { store.resetCacheItemToAutomatic(id: itemID) },
+                    isUserOverride: store.userOverridePaths.contains(item.path.standardizedFileURL.path),
+                    isMetadataPending: isCacheMetadataPending(item)
+                )
+                .listRowInsets(ScanListRowInsets.standard)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+            }
+        }
+        .listStyle(.inset)
+        .scrollContentBackground(.hidden)
+        .background(AppStyle.canvas)
     }
 
     private var emptyFilterState: some View {

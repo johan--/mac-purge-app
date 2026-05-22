@@ -15,7 +15,6 @@ struct AppBrandMark: View {
             Text("Purge")
                 .font(.system(size: 14, weight: .semibold))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Purge")
     }
@@ -24,7 +23,9 @@ struct AppBrandMark: View {
 /// Shared horizontal inset for Settings-style detail pages (App Caches, Dev Tools, Settings).
 enum AppDetailPageLayout {
     static let horizontalInset: CGFloat = 24
-    static let verticalPadding: CGFloat = 24
+    /// Space below the title bar before page content begins.
+    static let topContentInset: CGFloat = 20
+    static let verticalPadding: CGFloat = 12
 }
 
 /// Page header matching Settings section typography (`.headline` + subtitle).
@@ -34,10 +35,10 @@ struct AppSectionPageHeader<Trailing: View>: View {
     @ViewBuilder var trailing: () -> Trailing
 
     var body: some View {
-        HStack(alignment: .center, spacing: AppStyle.Spacing.medium) {
+        HStack(alignment: .top, spacing: AppStyle.Spacing.medium) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.headline)
+                    .font(AppStyle.Typography.pageTitle)
                 Text(subtitle)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -49,8 +50,45 @@ struct AppSectionPageHeader<Trailing: View>: View {
             trailing()
         }
         .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-        .padding(.top, AppDetailPageLayout.verticalPadding)
+        .padding(.top, AppDetailPageLayout.topContentInset)
         .padding(.bottom, AppStyle.Spacing.small)
+    }
+}
+
+struct AppScanButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label("Scan", systemImage: "arrow.clockwise")
+                .labelStyle(.titleAndIcon)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+        }
+        .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
+        .keyboardShortcut("r", modifiers: [.command])
+    }
+}
+
+struct AppCleanSelectedButton: View {
+    @EnvironmentObject private var store: PurgeStore
+
+    private var title: String {
+        guard store.selectedCount > 0 else { return "Clean Selected" }
+        return "Clean Selected (\(formatBytes(store.selectedTotalBytes)))"
+    }
+
+    var body: some View {
+        Button {
+            store.showDeletionSheet = true
+        } label: {
+            Label(title, systemImage: "trash.fill")
+                .labelStyle(.titleAndIcon)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+        }
+        .buttonStyle(AppButtonStyle(variant: .filled, isCapsule: true))
+        .disabled(store.selectedCount == 0 || store.isDeleting)
     }
 }
 
@@ -90,19 +128,33 @@ struct AppButtonStyle: ButtonStyle {
     }
 
     var variant: Variant = .bordered
+    var isCapsule: Bool = false
 
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12, weight: .medium))
+            .font(labelFont)
             .foregroundStyle(foregroundStyle)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.horizontal, isCapsule ? 14 : 10)
+            .padding(.vertical, isCapsule ? 7 : 6)
             .background(background(configuration: configuration))
             .overlay(border)
-            .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous))
+            .clipShape(buttonShape)
             .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.45)
+    }
+
+    private var labelFont: Font {
+        let size: CGFloat = isCapsule ? 13 : 12
+        let design: Font.Design = isCapsule ? .rounded : .default
+        return .system(size: size, weight: .semibold, design: design)
+    }
+
+    private var buttonShape: AnyShape {
+        if isCapsule {
+            return AnyShape(Capsule(style: .continuous))
+        }
+        return AnyShape(RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous))
     }
 
     private var foregroundStyle: Color {
@@ -129,9 +181,15 @@ struct AppButtonStyle: ButtonStyle {
         }
     }
 
+    @ViewBuilder
     private var border: some View {
-        RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
-            .stroke(variant == .filled ? Color.clear : AppStyle.hairline)
+        if isCapsule {
+            Capsule(style: .continuous)
+                .stroke(variant == .filled ? Color.clear : AppStyle.hairline)
+        } else {
+            RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
+                .stroke(variant == .filled ? Color.clear : AppStyle.hairline)
+        }
     }
 }
 
@@ -238,6 +296,143 @@ struct AppSortMenu: View {
         .buttonStyle(AppButtonStyle(variant: .bordered))
         .fixedSize()
         .accessibilityLabel("Sort by \(selection.displayName)")
+    }
+}
+
+enum AppWindowLayout {
+    static let width: CGFloat = 980
+    static let minHeight: CGFloat = 600
+    static let defaultHeight: CGFloat = 700
+}
+
+private enum FixedWindowWidthStorage {
+    static var delegateKey: UInt8 = 0
+}
+
+/// Clamps live resize attempts; SwiftUI often overrides `minSize` / `maxSize` alone.
+private final class FixedWindowWidthDelegate: NSObject, NSWindowDelegate {
+    let fixedWidth: CGFloat
+    let minHeight: CGFloat
+    private weak var chainedDelegate: NSWindowDelegate?
+
+    init(fixedWidth: CGFloat, minHeight: CGFloat, chainedDelegate: NSWindowDelegate?) {
+        self.fixedWidth = fixedWidth
+        self.minHeight = minHeight
+        self.chainedDelegate = chainedDelegate
+    }
+
+    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        let clamped = NSSize(
+            width: fixedWidth,
+            height: max(frameSize.height, minHeight)
+        )
+        if let chainedDelegate,
+           chainedDelegate.responds(to: #selector(NSWindowDelegate.windowWillResize(_:to:))) {
+            return chainedDelegate.windowWillResize!(sender, to: clamped)
+        }
+        return clamped
+    }
+}
+
+private struct FixedWindowWidthConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> ConfiguratorHostingView {
+        ConfiguratorHostingView()
+    }
+
+    func updateNSView(_ nsView: ConfiguratorHostingView, context: Context) {
+        nsView.applyWindowSizePolicy()
+    }
+
+    final class ConfiguratorHostingView: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            applyWindowSizePolicy()
+        }
+
+        func applyWindowSizePolicy() {
+            guard let window else { return }
+            let width = AppWindowLayout.width
+            let minHeight = AppWindowLayout.minHeight
+
+            window.minSize = NSSize(width: width, height: minHeight)
+            window.maxSize = NSSize(width: width, height: .greatestFiniteMagnitude)
+
+            if let existing = objc_getAssociatedObject(
+                window,
+                &FixedWindowWidthStorage.delegateKey
+            ) as? FixedWindowWidthDelegate {
+                if window.delegate !== existing {
+                    window.delegate = existing
+                }
+            } else {
+                let delegate = FixedWindowWidthDelegate(
+                    fixedWidth: width,
+                    minHeight: minHeight,
+                    chainedDelegate: window.delegate
+                )
+                objc_setAssociatedObject(
+                    window,
+                    &FixedWindowWidthStorage.delegateKey,
+                    delegate,
+                    .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+                )
+                window.delegate = delegate
+            }
+
+            clampFrameIfNeeded(window, width: width, minHeight: minHeight)
+        }
+
+        private func clampFrameIfNeeded(_ window: NSWindow, width: CGFloat, minHeight: CGFloat) {
+            var frame = window.frame
+            let targetHeight = max(frame.height, minHeight)
+            guard abs(frame.width - width) > 0.5 || abs(frame.height - targetHeight) > 0.5 else { return }
+
+            let widthDelta = width - frame.width
+            frame.size.width = width
+            frame.origin.x -= widthDelta
+            if abs(frame.height - targetHeight) > 0.5 {
+                frame.origin.y += frame.height - targetHeight
+                frame.size.height = targetHeight
+            }
+            window.setFrame(frame, display: false)
+        }
+    }
+}
+
+/// Collapses the empty toolbar strip NavigationSplitView reserves above the detail column.
+private struct DetailColumnCompactTopModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .navigationTitle("")
+            .modifier(DetailColumnToolbarCollapseModifier())
+            .ignoresSafeArea(.container, edges: .top)
+    }
+}
+
+private struct DetailColumnToolbarCollapseModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 15.0, *) {
+            content
+                .toolbar(removing: .title)
+                .toolbarBackground(.hidden, for: .windowToolbar)
+                .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        } else if #available(macOS 14.0, *) {
+            content
+                .toolbarBackground(.hidden, for: .windowToolbar)
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    func fixedAppWindowWidth() -> some View {
+        background(FixedWindowWidthConfigurator())
+    }
+
+    func detailColumnCompactTop() -> some View {
+        modifier(DetailColumnCompactTopModifier())
     }
 }
 
