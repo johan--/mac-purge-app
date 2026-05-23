@@ -222,9 +222,9 @@ struct AppCachesView: View {
                     primaryLabel: item.appName,
                     formattedSize: item.formattedSize,
                     safetyInfo: item.safetyInfo,
-                    icon: appIcon(for: item),
+                    brandIcon: .cacheItem(item),
                     onRequestUnknownDelete: item.safetyInfo.level == .unknown
-                        ? { store.requestUnknownDeletion(PurgeStore.DeletionCandidate.forCache(item)) }
+                        ? { store.requestUnknownDeletion(candidates: PurgeStore.DeletionCandidate.deletionCandidates(forCache: item)) }
                         : nil,
                     detailCaption: nil,
                     reinstallSafety: reinstallDisplay(for: item),
@@ -234,7 +234,9 @@ struct AppCachesView: View {
                     onMarkMedium: { store.markCacheItem(id: itemID, as: .medium) },
                     onMarkDanger: { store.markCacheItem(id: itemID, as: .danger) },
                     onResetToAutomatic: { store.resetCacheItemToAutomatic(id: itemID) },
-                    isUserOverride: store.userOverridePaths.contains(item.path.standardizedFileURL.path),
+                    isUserOverride: item.locations.contains {
+                        store.userOverridePaths.contains($0.path.standardizedFileURL.path)
+                    },
                     isMetadataPending: false
                 )
                 .listRowInsets(ScanListRowInsets.standard)
@@ -280,12 +282,6 @@ struct AppCachesView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func appIcon(for item: CacheItem) -> NSImage {
-        if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: item.bundleID) {
-            return NSWorkspace.shared.icon(forFile: appURL.path)
-        }
-        return NSWorkspace.shared.icon(forFile: item.path.path)
-    }
 }
 
 #Preview("App Caches — scanning") {
@@ -302,12 +298,14 @@ struct AppCachesView: View {
     AppCachesView(
         items: .constant([
             CacheItem(
+                definitionKey: "safari",
+                location: CacheLocation(
+                    path: URL(fileURLWithPath: "/tmp/Safari"),
+                    sizeBytes: 420_000_000,
+                    lastModified: Date(),
+                    folderName: "com.apple.Safari"
+                ),
                 appName: "Safari",
-                bundleID: "com.apple.Safari",
-                path: URL(fileURLWithPath: "/tmp/Safari"),
-                sizeBytes: 420_000_000,
-                lastModified: Date(),
-                isSelected: false,
                 safetyInfo: SafetyInfo(
                     level: .safe,
                     headline: "Safari",

@@ -40,17 +40,25 @@ final class PurgeStore: ObservableObject {
         var needsReinstallFriction: Bool { reinstallSafety == .missingLockfile }
         var needsUncommittedGitFriction: Bool { gitStatus == .dirty }
 
-        static func forCache(_ item: CacheItem) -> DeletionCandidate {
-            DeletionCandidate(
-                title: item.appName,
-                path: item.path,
-                sizeBytes: item.sizeBytes,
-                safetyInfo: item.safetyInfo,
-                reinstallCommand: item.safetyInfo.reinstallCommand,
-                subtitle: item.bundleID,
-                reinstallSafety: item.reinstallSafety,
-                gitStatus: item.gitStatus
-            )
+        static func deletionCandidates(forCache item: CacheItem) -> [DeletionCandidate] {
+            item.locations.map { location in
+                DeletionCandidate(
+                    title: item.appName,
+                    path: location.path,
+                    sizeBytes: location.sizeBytes,
+                    safetyInfo: item.safetyInfo,
+                    reinstallCommand: item.safetyInfo.reinstallCommand,
+                    subtitle: location.folderName,
+                    reinstallSafety: cacheReinstallStatus(forPath: location.path),
+                    gitStatus: item.gitStatus
+                )
+            }
+        }
+
+        private static func cacheReinstallStatus(forPath url: URL) -> ReinstallSafetyStatus {
+            let name = url.lastPathComponent.lowercased()
+            if name == "deriveddata" { return .notApplicable }
+            return ReinstallSafetyEvaluator.evaluateByFolderNameDeleting(path: url)
         }
     }
 
@@ -186,7 +194,7 @@ final class PurgeStore: ObservableObject {
     /// Selected caches eligible for manual delete (includes Do Not Delete / Not Sure when selected).
     var selectedGeneralDeletionCandidates: [DeletionCandidate] {
         cacheItems.filter { $0.isSelected && isManualDeletionCandidateEligible($0.safetyInfo) }
-            .map { DeletionCandidate.forCache($0) }
+            .flatMap { DeletionCandidate.deletionCandidates(forCache: $0) }
             .sorted { $0.sizeBytes > $1.sizeBytes }
     }
 
@@ -215,7 +223,7 @@ final class PurgeStore: ObservableObject {
 
     var deletionCandidates: [DeletionCandidate] {
         let caches = cacheItems.filter { $0.isSelected && isManualDeletionCandidateEligible($0.safetyInfo) }
-            .map { DeletionCandidate.forCache($0) }
+            .flatMap { DeletionCandidate.deletionCandidates(forCache: $0) }
 
         let tools = devTools.filter { $0.isSelected }.filter(\.isDetected)
             .flatMap { tool in tool.paths.map { devToolDeletionCandidate(tool, path: $0) } }
@@ -373,7 +381,14 @@ final class PurgeStore: ObservableObject {
         guard !deletedPaths.isEmpty else { return }
 
         withAnimation(.easeInOut(duration: 0.2)) {
-            cacheItems.removeAll { deletedPaths.contains($0.path.standardizedFileURL.path) }
+            cacheItems = cacheItems.compactMap { item in
+                let remaining = item.locations.filter {
+                    !deletedPaths.contains($0.path.standardizedFileURL.path)
+                }
+                guard !remaining.isEmpty else { return nil }
+                guard remaining.count != item.locations.count else { return item }
+                return item.withLocations(remaining)
+            }
 
             devTools = devTools.map { tool in
                 let paths = tool.paths
@@ -385,8 +400,8 @@ final class PurgeStore: ObservableObject {
                     return tool
                 }
                 return DevTool(
+                    definitionKey: tool.definitionKey,
                     toolName: tool.toolName,
-                    iconName: tool.iconName,
                     paths: paths,
                     sizeBytes: newSize,
                     isSelected: newSelected,
@@ -440,8 +455,13 @@ final class PurgeStore: ObservableObject {
         let skippedPaths = Set(skipped.map { URL(fileURLWithPath: $0.path).standardizedFileURL.path })
         guard !skippedPaths.isEmpty else { return }
 
-        for index in cacheItems.indices where skippedPaths.contains(cacheItems[index].path.standardizedFileURL.path) {
-            cacheItems[index].isSelected = false
+        for index in cacheItems.indices {
+            let anySkipped = cacheItems[index].locations.contains {
+                skippedPaths.contains($0.path.standardizedFileURL.path)
+            }
+            if anySkipped {
+                cacheItems[index].isSelected = false
+            }
         }
 
         for index in devTools.indices {
@@ -515,17 +535,11 @@ final class PurgeStore: ObservableObject {
         errorMessage = nil
         let scannedCaches = await cacheScanner.scanCaches()
         let junkItems = await cacheScanner.scanSystemJunk()
-        var allItems = scannedCaches + junkItems
-        var seenPaths = Set<String>()
-        allItems = allItems.filter { item in
-            let path = item.path.standardizedFileURL.path
-            guard !seenPaths.contains(path) else { return false }
-            seenPaths.insert(path)
-            return true
-        }
+        let allItems = dedupeCacheItemsByPath(scannedCaches + junkItems)
         await gitChecker.clearSessionCache()
         withAnimation(.easeInOut(duration: 0.2)) {
             cacheItems = allItems.sorted { $0.sizeBytes > $1.sizeBytes }
+            reconcileCrossTabCacheDuplicates()
         }
         isScanningGeneral = false
         await hydrateCacheSafetyMetadataParallel()
@@ -543,6 +557,7 @@ final class PurgeStore: ObservableObject {
             devTools = outcome.tools
             projectGroups = outcome.projects
             simulatorDevices = unsizedSimulators
+            reconcileCrossTabCacheDuplicates()
         }
         isScanningDeveloper = false
         let needsSizing = !unsizedSimulators.isEmpty
@@ -589,10 +604,11 @@ final class PurgeStore: ObservableObject {
         guard ScheduledCleaningPreferenceStore.shared.isEnabled else {
             return ScheduledCleaningSummary(deletedCount: 0, freedBytes: 0)
         }
-        let minDays = ScheduledCleaningPreferenceStore.shared.unusedDays.rawValue
+        let option = ScheduledCleaningPreferenceStore.shared.unusedDays
         return await performSafeCleanup(
             referenceDate: now,
-            minUnusedDays: minDays,
+            minUnusedDaysForCaches: option.cacheStaleDays,
+            minUnusedDaysForDeveloperArtifacts: option.developerArtifactStaleDays,
             historyTrigger: .scheduled,
             scheduledNotifications: true,
             clearSelectionsAfterCleanup: false
@@ -604,7 +620,8 @@ final class PurgeStore: ObservableObject {
     func performManualSafeCleanNow(referenceDate now: Date = Date()) async -> ScheduledCleaningSummary {
         let summary = await performSafeCleanup(
             referenceDate: now,
-            minUnusedDays: 0,
+            minUnusedDaysForCaches: 0,
+            minUnusedDaysForDeveloperArtifacts: 0,
             historyTrigger: .manual,
             scheduledNotifications: false,
             clearSelectionsAfterCleanup: true
@@ -622,7 +639,8 @@ final class PurgeStore: ObservableObject {
 
     private func performSafeCleanup(
         referenceDate now: Date,
-        minUnusedDays: Int,
+        minUnusedDaysForCaches: Int,
+        minUnusedDaysForDeveloperArtifacts: Int,
         historyTrigger: CleanupTrigger,
         scheduledNotifications: Bool,
         clearSelectionsAfterCleanup: Bool
@@ -638,7 +656,7 @@ final class PurgeStore: ObservableObject {
             guard artifact.safetyInfo.level == .safe else { return nil }
             guard artifact.reinstallSafety != .missingLockfile else { return nil }
             guard artifact.gitStatus == .clean else { return nil }
-            guard daysBetween(artifact.lastModified, now) >= minUnusedDays else { return nil }
+            guard daysBetween(artifact.lastModified, now) >= minUnusedDaysForDeveloperArtifacts else { return nil }
             return artifact.path.standardizedFileURL
         }
 
@@ -648,16 +666,18 @@ final class PurgeStore: ObservableObject {
                 guard FileManager.default.fileExists(atPath: url.path) else { return nil }
                 let reinstall = ReinstallSafetyEvaluator.evaluateByFolderNameDeleting(path: url)
                 guard reinstall != .missingLockfile else { return nil }
-                guard daysBetween(FolderSizing.contentModificationDate(at: url), now) >= minUnusedDays else { return nil }
+                guard daysBetween(FolderSizing.contentModificationDate(at: url), now) >= minUnusedDaysForDeveloperArtifacts else { return nil }
                 return url.standardizedFileURL
             }
         }
 
-        let cacheURLs = cacheItems.filter { $0.safetyInfo.level == .safe }.compactMap { item -> URL? in
-            guard item.reinstallSafety != .missingLockfile else { return nil }
-            guard daysBetween(FolderSizing.contentModificationDate(at: item.path), now) >= minUnusedDays else { return nil }
-            guard item.gitStatus == .clean else { return nil }
-            return item.path.standardizedFileURL
+        let cacheURLs = cacheItems.filter { $0.safetyInfo.level == .safe }.flatMap { item -> [URL] in
+            guard item.reinstallSafety != .missingLockfile else { return [] }
+            guard item.gitStatus == .clean else { return [] }
+            return item.locations.compactMap { location -> URL? in
+                guard daysBetween(location.lastModified, now) >= minUnusedDaysForCaches else { return nil }
+                return location.path.standardizedFileURL
+            }
         }
 
         let rough = Array(Set(projectURLs + toolURLs + cacheURLs)).sorted { $0.path < $1.path }
@@ -713,6 +733,81 @@ final class PurgeStore: ObservableObject {
         Calendar.current.dateComponents([.day], from: start, to: end).day ?? 0
     }
 
+    private func dedupeCacheItemsByPath(_ items: [CacheItem]) -> [CacheItem] {
+        var seenPaths = Set<String>()
+        return items.compactMap { item in
+            let kept = item.locations.filter { location in
+                let path = location.path.standardizedFileURL.path
+                guard !seenPaths.contains(path) else { return false }
+                seenPaths.insert(path)
+                return true
+            }
+            guard !kept.isEmpty else { return nil }
+            guard kept.count != item.locations.count else { return item }
+            return item.withLocations(kept)
+        }
+    }
+
+    private func reconcileCrossTabCacheDuplicates() {
+        let devPaths = Set(
+            devTools
+                .filter(\.isDetected)
+                .flatMap(\.paths)
+                .map { $0.standardizedFileURL.path }
+        )
+        guard !devPaths.isEmpty else { return }
+
+        cacheItems = cacheItems.compactMap { item in
+            let remaining = item.locations.filter {
+                !devPaths.contains($0.path.standardizedFileURL.path)
+            }
+            guard !remaining.isEmpty else { return nil }
+            guard remaining.count != item.locations.count else { return item }
+            return item.withLocations(remaining)
+        }
+    }
+
+    private func resolvedAutomaticSafety(for item: CacheItem) -> SafetyInfo {
+        if let key = item.definitionKey,
+           let record = ExplanationDatabase.record(forKey: key) {
+            return ExplanationDatabase.safetyInfo(from: record)
+        }
+        let primary = item.locations[0]
+        let fallback = appNameFromBundleIDForReset(primary.folderName) ?? item.appName
+        return ExplanationResolver.initialSafetyForCacheFolder(
+            folderName: primary.folderName,
+            friendlyHeadline: fallback,
+            path: primary.path
+        )
+    }
+
+    private nonisolated static func worstReinstall(
+        _ a: ReinstallSafetyStatus,
+        _ b: ReinstallSafetyStatus
+    ) -> ReinstallSafetyStatus {
+        reinstallRank(a) >= reinstallRank(b) ? a : b
+    }
+
+    private nonisolated static func worstGit(_ a: GitWorktreeStatus, _ b: GitWorktreeStatus) -> GitWorktreeStatus {
+        gitRank(a) >= gitRank(b) ? a : b
+    }
+
+    private nonisolated static func reinstallRank(_ status: ReinstallSafetyStatus) -> Int {
+        switch status {
+        case .missingLockfile: return 2
+        case .reinstallable: return 1
+        case .notApplicable: return 0
+        }
+    }
+
+    private nonisolated static func gitRank(_ status: GitWorktreeStatus) -> Int {
+        switch status {
+        case .dirty: return 2
+        case .unknown: return 1
+        case .clean: return 0
+        }
+    }
+
     private func hydrateCacheSafetyMetadataParallel() async {
         guard !cacheItems.isEmpty else { return }
         isEnrichingGeneral = true
@@ -721,9 +816,15 @@ final class PurgeStore: ObservableObject {
         await withTaskGroup(of: (Int, ReinstallSafetyStatus, GitWorktreeStatus).self) { group in
             for index in copy.indices {
                 group.addTask {
-                    let url = copy[index].path.standardizedFileURL
-                    let reinstall = Self.cacheReinstallStatus(forPath: url)
-                    let git = await self.gitChecker.cleanupStatus(for: url)
+                    var reinstall = ReinstallSafetyStatus.notApplicable
+                    var git = GitWorktreeStatus.clean
+                    for location in copy[index].locations {
+                        let url = location.path.standardizedFileURL
+                        let locReinstall = Self.cacheReinstallStatus(forPath: url)
+                        reinstall = Self.worstReinstall(reinstall, locReinstall)
+                        let locGit = await self.gitChecker.cleanupStatus(for: url)
+                        git = Self.worstGit(git, locGit)
+                    }
                     return (index, reinstall, git)
                 }
             }
@@ -789,7 +890,9 @@ final class PurgeStore: ObservableObject {
 
     /// Resolves the same friendly headline shown in scan lists for a path (scheduled cleanup).
     private func displayNameForDeletionPath(_ standardizedPath: String) -> String {
-        if let item = cacheItems.first(where: { $0.path.standardizedFileURL.path == standardizedPath }) {
+        if let item = cacheItems.first(where: { item in
+            item.locations.contains { $0.path.standardizedFileURL.path == standardizedPath }
+        }) {
             return item.appName
         }
         for tool in devTools where tool.isDetected {
@@ -809,13 +912,14 @@ final class PurgeStore: ObservableObject {
 
     private func devToolDeletionCandidate(_ tool: DevTool, path: URL) -> DeletionCandidate {
         let key = path.standardizedFileURL.path
+        let pathBytes = cacheScanner.calculateFolderSize(at: path)
         return DeletionCandidate(
             title: tool.safetyInfo.headline,
             path: path,
-            sizeBytes: tool.sizeBytes,
+            sizeBytes: pathBytes,
             safetyInfo: tool.safetyInfo,
             reinstallCommand: tool.safetyInfo.reinstallCommand,
-            subtitle: nil,
+            subtitle: path.lastPathComponent,
             reinstallSafety: ReinstallSafetyEvaluator.evaluateByFolderNameDeleting(path: path),
             gitStatus: devToolRepoStatusByPath[key] ?? .unknown
         )
@@ -843,7 +947,7 @@ final class PurgeStore: ObservableObject {
             sizeBytes: artifact.sizeBytes,
             safetyInfo: artifact.safetyInfo,
             reinstallCommand: artifact.safetyInfo.reinstallCommand,
-            subtitle: artifact.projectRoot.path,
+            subtitle: artifact.projectRoot.lastPathComponent,
             reinstallSafety: artifact.reinstallSafety,
             gitStatus: artifact.gitStatus
         )
@@ -914,14 +1018,16 @@ final class PurgeStore: ObservableObject {
 
     /// Mark a row with a manual category. Persists `user_overrides.json` keyed
     /// by the exact path and updates the row in place.
-    func markCacheItem(id: UUID, as level: SafetyLevel) {
+    func markCacheItem(id: String, as level: SafetyLevel) {
         guard let index = cacheItems.firstIndex(where: { $0.id == id }) else { return }
         let item = cacheItems[index]
-        UserOverridesStore.write(
-            path: item.path,
-            overrideTag: Self.tag(for: level),
-            originalTag: Self.tag(for: item.safetyInfo.level)
-        )
+        for location in item.locations {
+            UserOverridesStore.write(
+                path: location.path,
+                overrideTag: Self.tag(for: level),
+                originalTag: Self.tag(for: item.safetyInfo.level)
+            )
+        }
         let info = SafetyInfo(
             level: level,
             headline: item.safetyInfo.headline,
@@ -982,17 +1088,15 @@ final class PurgeStore: ObservableObject {
     }
 
     /// Remove a single override and re-resolve the row using the automatic chain.
-    func resetCacheItemToAutomatic(id: UUID) {
+    func resetCacheItemToAutomatic(id: String) {
         guard let index = cacheItems.firstIndex(where: { $0.id == id }) else { return }
         let item = cacheItems[index]
-        UserOverridesStore.remove(path: item.path)
+        for location in item.locations {
+            UserOverridesStore.remove(path: location.path)
+        }
         refreshUserOverridePaths()
 
-        let resolved = ExplanationResolver.initialSafetyForCacheFolder(
-            folderName: item.bundleID,
-            friendlyHeadline: appNameFromBundleIDForReset(item.bundleID) ?? item.appName,
-            path: item.path
-        )
+        let resolved = resolvedAutomaticSafety(for: item)
         withAnimation {
             cacheItems[index].safetyInfo = resolved
             cacheItems[index].appName = resolved.headline
@@ -1007,12 +1111,9 @@ final class PurgeStore: ObservableObject {
         refreshUserOverridePaths()
 
         let label = tool.toolName
-        let key = devToolExplanationKey(forToolLabel: label)
-        let info = SafetyInfo.fromExplanationDatabase(
-            key: key,
-            friendlyFallback: label,
-            reinstallCommand: tool.safetyInfo.reinstallCommand,
-            path: primary
+        let info = DevScanner.automaticSafetyInfo(
+            forDevToolLabel: label,
+            primaryPath: primary
         )
         withAnimation {
             devTools[index].safetyInfo = info
@@ -1026,11 +1127,10 @@ final class PurgeStore: ObservableObject {
         UserOverridesStore.remove(path: artifact.path)
         refreshUserOverridePaths()
 
-        let info = SafetyInfo.fromExplanationDatabase(
-            key: artifact.kind.explanationKey,
-            friendlyFallback: artifact.kind.rowTag,
-            reinstallCommand: artifact.safetyInfo.reinstallCommand,
-            path: artifact.path
+        let info = SafetyInfo.forStaleProjectArtifact(
+            kind: artifact.kind,
+            path: artifact.path,
+            reinstallCommand: artifact.safetyInfo.reinstallCommand
         )
         var groups = projectGroups
         groups[groupIndex].artifacts[artifactIndex].safetyInfo = info
@@ -1040,18 +1140,16 @@ final class PurgeStore: ObservableObject {
     }
 
     /// Re-resolve a single cache row using the local chain only.
-    func recategorizeCacheItem(id: UUID) {
+    func recategorizeCacheItem(id: String) {
         guard let index = cacheItems.firstIndex(where: { $0.id == id }) else { return }
         let item = cacheItems[index]
 
-        UserOverridesStore.remove(path: item.path)
+        for location in item.locations {
+            UserOverridesStore.remove(path: location.path)
+        }
         refreshUserOverridePaths()
 
-        let resolved = ExplanationResolver.initialSafetyForCacheFolder(
-            folderName: item.bundleID,
-            friendlyHeadline: appNameFromBundleIDForReset(item.bundleID) ?? item.appName,
-            path: item.path
-        )
+        let resolved = resolvedAutomaticSafety(for: item)
         withAnimation {
             cacheItems[index].safetyInfo = resolved
             cacheItems[index].appName = resolved.headline
@@ -1068,12 +1166,9 @@ final class PurgeStore: ObservableObject {
         refreshUserOverridePaths()
 
         let label = tool.toolName
-        let key = devToolExplanationKey(forToolLabel: label)
-        let info = SafetyInfo.fromExplanationDatabase(
-            key: key,
-            friendlyFallback: label,
-            reinstallCommand: tool.safetyInfo.reinstallCommand,
-            path: primary
+        let info = DevScanner.automaticSafetyInfo(
+            forDevToolLabel: label,
+            primaryPath: primary
         )
         withAnimation {
             devTools[index].safetyInfo = info
@@ -1089,11 +1184,10 @@ final class PurgeStore: ObservableObject {
         UserOverridesStore.remove(path: artifact.path)
         refreshUserOverridePaths()
 
-        let info = SafetyInfo.fromExplanationDatabase(
-            key: artifact.kind.explanationKey,
-            friendlyFallback: artifact.kind.rowTag,
-            reinstallCommand: artifact.safetyInfo.reinstallCommand,
-            path: artifact.path
+        let info = SafetyInfo.forStaleProjectArtifact(
+            kind: artifact.kind,
+            path: artifact.path,
+            reinstallCommand: artifact.safetyInfo.reinstallCommand
         )
         var groups = projectGroups
         groups[groupIndex].artifacts[artifactIndex].safetyInfo = info
@@ -1107,12 +1201,7 @@ final class PurgeStore: ObservableObject {
     func reapplyAutomaticCategorizationForAllRows() {
         var caches = cacheItems
         for index in caches.indices {
-            let item = caches[index]
-            let resolved = ExplanationResolver.initialSafetyForCacheFolder(
-                folderName: item.bundleID,
-                friendlyHeadline: appNameFromBundleIDForReset(item.bundleID) ?? item.appName,
-                path: item.path
-            )
+            let resolved = resolvedAutomaticSafety(for: caches[index])
             caches[index].safetyInfo = resolved
             caches[index].appName = resolved.headline
         }
@@ -1124,12 +1213,9 @@ final class PurgeStore: ObservableObject {
         for index in tools.indices {
             let tool = tools[index]
             let label = tool.toolName
-            let key = devToolExplanationKey(forToolLabel: label)
-            let info = SafetyInfo.fromExplanationDatabase(
-                key: key,
-                friendlyFallback: label,
-                reinstallCommand: tool.safetyInfo.reinstallCommand,
-                path: tool.primaryOverridePath
+            let info = DevScanner.automaticSafetyInfo(
+                forDevToolLabel: label,
+                primaryPath: tool.primaryOverridePath ?? tool.paths.first
             )
             tools[index].safetyInfo = info
         }
@@ -1141,11 +1227,10 @@ final class PurgeStore: ObservableObject {
         for gi in groups.indices {
             for ai in groups[gi].artifacts.indices {
                 let artifact = groups[gi].artifacts[ai]
-                let info = SafetyInfo.fromExplanationDatabase(
-                    key: artifact.kind.explanationKey,
-                    friendlyFallback: artifact.kind.rowTag,
-                    reinstallCommand: artifact.safetyInfo.reinstallCommand,
-                    path: artifact.path
+                let info = SafetyInfo.forStaleProjectArtifact(
+                    kind: artifact.kind,
+                    path: artifact.path,
+                    reinstallCommand: artifact.safetyInfo.reinstallCommand
                 )
                 groups[gi].artifacts[ai].safetyInfo = info
             }
@@ -1191,6 +1276,7 @@ final class PurgeStore: ObservableObject {
         let map: [String: String] = [
             "Xcode Derived Data": "DerivedData",
             "Xcode iOS DeviceSupport": "iOS DeviceSupport",
+            "Xcode Archives": "archives",
             "Xcode Caches": "xcode",
             "Homebrew Cache": "homebrew",
             "Gradle Cache": "gradle",

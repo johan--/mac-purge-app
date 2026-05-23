@@ -17,8 +17,8 @@ struct ScanResultRow: View {
     let primaryLabel: String
     let formattedSize: String
     let safetyInfo: SafetyInfo
-    /// When nil, a generic folder icon is shown.
-    let icon: NSImage?
+    /// Brand or static row icon; re-resolves for light/dark when using cache/dev/project sources.
+    let brandIcon: AdaptiveBrandIconImage.Source?
     let onRequestUnknownDelete: (() -> Void)?
     /// Small footer line (e.g. artifact kind tag).
     let detailCaption: String?
@@ -35,8 +35,14 @@ struct ScanResultRow: View {
     let isUserOverride: Bool
     /// When `false`, the row checkbox is disabled (e.g. high-risk items that should not participate in bulk select).
     var allowsBulkSelection: Bool = true
+    /// When `false`, hides the row checkbox; selection may still be driven by a parent control (e.g. project group header).
+    var showsBulkCheckbox: Bool = true
     /// When true, trailing size and safety badge show skeleton placeholders (post-scan enrichment).
     var isMetadataPending: Bool = false
+    /// When false, the row renders without its own card chrome (for nested rows inside a parent card).
+    var showsCardChrome: Bool = true
+    /// When false, no leading icon column is shown (e.g. expanded project artifact rows).
+    var showsLeadingIcon: Bool = true
 
     @Environment(\.scanRowPlaceholderAppearance) private var rendersAsPlaceholder
 
@@ -61,11 +67,12 @@ struct ScanResultRow: View {
         allowsBulkSelection
     }
 
-    private var resolvedIcon: NSImage {
-        if let icon {
-            return icon
-        }
-        return NSWorkspace.shared.icon(forFileType: "public.folder")
+    private var showsRowCheckbox: Bool {
+        showsBulkCheckbox && allowsBulkSelection
+    }
+
+    private var canTapRowToToggleSelection: Bool {
+        showsBulkCheckbox && allowsBulkSelection
     }
 
     private var hasExtraBadges: Bool {
@@ -82,7 +89,7 @@ struct ScanResultRow: View {
         primaryLabel: String,
         formattedSize: String,
         safetyInfo: SafetyInfo,
-        icon: NSImage?,
+        brandIcon: AdaptiveBrandIconImage.Source?,
         onRequestUnknownDelete: (() -> Void)?,
         detailCaption: String? = nil,
         reinstallSafety: ReinstallSafetyStatus? = nil,
@@ -94,13 +101,16 @@ struct ScanResultRow: View {
         onResetToAutomatic: (() -> Void)? = nil,
         isUserOverride: Bool = false,
         allowsBulkSelection: Bool = true,
-        isMetadataPending: Bool = false
+        showsBulkCheckbox: Bool = true,
+        isMetadataPending: Bool = false,
+        showsCardChrome: Bool = true,
+        showsLeadingIcon: Bool = true
     ) {
         self._isSelected = isSelected
         self.primaryLabel = primaryLabel
         self.formattedSize = formattedSize
         self.safetyInfo = safetyInfo
-        self.icon = icon
+        self.brandIcon = brandIcon
         self.onRequestUnknownDelete = onRequestUnknownDelete
         self.detailCaption = detailCaption
         self.reinstallSafety = reinstallSafety
@@ -112,18 +122,29 @@ struct ScanResultRow: View {
         self.onResetToAutomatic = onResetToAutomatic
         self.isUserOverride = isUserOverride
         self.allowsBulkSelection = allowsBulkSelection
+        self.showsBulkCheckbox = showsBulkCheckbox
         self.isMetadataPending = isMetadataPending
+        self.showsCardChrome = showsCardChrome
+        self.showsLeadingIcon = showsLeadingIcon
     }
 
     var body: some View {
+        rowBody
+            .modifier(ScanResultRowChrome(showsCardChrome: showsCardChrome, canSelectForBulk: canSelectForBulk))
+            .contextMenu {
+                rowContextMenu
+            }
+    }
+
+    private var rowBody: some View {
         HStack(alignment: .center, spacing: 12) {
-            if canSelectForBulk {
+            if showsRowCheckbox {
                 Toggle("", isOn: $isSelected)
                     .labelsHidden()
                     .toggleStyle(.checkbox)
             }
 
-            if canSelectForBulk {
+            if canTapRowToToggleSelection {
                 Button {
                     isSelected.toggle()
                 } label: {
@@ -138,19 +159,15 @@ struct ScanResultRow: View {
 
             trailingColumn
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(Color.primary.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .opacity(canSelectForBulk ? 1 : 0.55)
-        .contextMenu {
-            rowContextMenu
-        }
+        .padding(.horizontal, showsCardChrome ? 14 : 0)
+        .padding(.vertical, showsCardChrome ? 12 : 8)
     }
 
     private var rowMainContent: some View {
-        HStack(alignment: .center, spacing: 12) {
-            rowIconView
+        HStack(alignment: .center, spacing: showsLeadingIcon ? 12 : 0) {
+            if showsLeadingIcon {
+                rowIconView
+            }
             rowTextColumn
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -164,11 +181,8 @@ struct ScanResultRow: View {
                 .frame(width: 28, height: 28)
                 .accessibilityHidden(true)
                 .shimmering()
-        } else {
-            Image(nsImage: resolvedIcon)
-                .resizable()
-                .frame(width: 28, height: 28)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+        } else if let brandIcon {
+            AdaptiveBrandIconImage(source: brandIcon)
         }
     }
 
@@ -362,6 +376,25 @@ struct ScanResultRow: View {
     }
 }
 
+// MARK: - Row chrome
+
+private struct ScanResultRowChrome: ViewModifier {
+    let showsCardChrome: Bool
+    let canSelectForBulk: Bool
+
+    func body(content: Content) -> some View {
+        if showsCardChrome {
+            content
+                .background(Color.primary.opacity(0.05))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .opacity(canSelectForBulk ? 1 : 0.55)
+        } else {
+            content
+                .opacity(canSelectForBulk ? 1 : 0.55)
+        }
+    }
+}
+
 // MARK: - Placeholder
 
 extension ScanResultRow {
@@ -387,7 +420,7 @@ private struct ScanResultRowPlaceholder: View {
             primaryLabel: Self.primaryLabel(for: seed),
             formattedSize: Self.formattedSize(for: seed),
             safetyInfo: Self.safetyInfo(for: seed, showsExtraBadges: showsExtraBadges),
-            icon: nil,
+            brandIcon: nil,
             onRequestUnknownDelete: nil,
             detailCaption: showsExtraBadges ? Self.detailCaption(for: seed) : nil,
             reinstallSafety: nil,

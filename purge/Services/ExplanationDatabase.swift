@@ -58,6 +58,10 @@ enum ExplanationDatabase {
     private nonisolated(unsafe) static var cachedRecords: [String: BundledExplanationRecord]?
     private nonisolated(unsafe) static var cachedBundleIndex: [String: BundledExplanationRecord]?
     private nonisolated(unsafe) static var cachedAliasIndex: [String: BundledExplanationRecord]?
+    private nonisolated(unsafe) static var cachedAliasKeyIndex: [String: String]?
+    private nonisolated(unsafe) static var cachedBundleKeyIndex: [String: String]?
+    private nonisolated(unsafe) static var cachedBundleIDsByKey: [String: [String]]?
+    private nonisolated(unsafe) static var cachedAliasesByKey: [String: [String]]?
 
     private nonisolated static func loadFromBundle() -> [String: BundledExplanationRecord] {
         if let cachedRecords { return cachedRecords }
@@ -73,17 +77,30 @@ enum ExplanationDatabase {
         if let array = try? JSONDecoder().decode([BundledArrayEntry].self, from: data) {
             var dict: [String: BundledExplanationRecord] = [:]
             var aliasIndex: [String: BundledExplanationRecord] = [:]
+            var aliasKeyIndex: [String: String] = [:]
+            var bundleIDsByKey: [String: [String]] = [:]
+            var aliasesByKey: [String: [String]] = [:]
             for entry in array {
                 let rec = entry.record
                 dict[entry.key] = rec
+                if let bundleIds = entry.bundleIds, !bundleIds.isEmpty {
+                    bundleIDsByKey[entry.key] = bundleIds
+                }
+                if let aliases = entry.aliases, !aliases.isEmpty {
+                    aliasesByKey[entry.key] = aliases
+                }
                 if let aliases = entry.aliases {
                     for alias in aliases {
                         aliasIndex[alias.lowercased()] = rec
+                        aliasKeyIndex[alias.lowercased()] = entry.key
                     }
                 }
             }
             cachedRecords = dict
             cachedAliasIndex = aliasIndex
+            cachedAliasKeyIndex = aliasKeyIndex
+            cachedBundleIDsByKey = bundleIDsByKey
+            cachedAliasesByKey = aliasesByKey
             return dict
         }
 
@@ -109,14 +126,35 @@ enum ExplanationDatabase {
         if let cachedBundleIndex { return cachedBundleIndex }
         let dict = loadFromBundle()
         var index: [String: BundledExplanationRecord] = [:]
-        for record in dict.values {
+        var keyIndex: [String: String] = [:]
+        for (key, record) in dict {
             guard let bundleIds = record.bundleIds else { continue }
             for id in bundleIds {
                 index[id.lowercased()] = record
+                keyIndex[id.lowercased()] = key
             }
         }
         cachedBundleIndex = index
+        cachedBundleKeyIndex = keyIndex
         return index
+    }
+
+    private nonisolated static func bundleKeyIndex() -> [String: String] {
+        if let cachedBundleKeyIndex { return cachedBundleKeyIndex }
+        _ = bundleIdIndex()
+        return cachedBundleKeyIndex ?? [:]
+    }
+
+    private nonisolated static func aliasKeyIndex() -> [String: String] {
+        if let cachedAliasKeyIndex { return cachedAliasKeyIndex }
+        _ = loadFromBundle()
+        return cachedAliasKeyIndex ?? [:]
+    }
+
+    private nonisolated static func bundleIDsByKeyIndex() -> [String: [String]] {
+        if let cachedBundleIDsByKey { return cachedBundleIDsByKey }
+        _ = loadFromBundle()
+        return cachedBundleIDsByKey ?? [:]
     }
 
     /// Keys, aliases, and bundle IDs. All matching is case-insensitive.
@@ -137,6 +175,56 @@ enum ExplanationDatabase {
         }
 
         return nil
+    }
+
+    /// Canonical `explanations.json` key for a folder name, alias, or bundle ID (case-insensitive).
+    nonisolated static func definitionKey(forFolderName folderName: String) -> String? {
+        let lower = folderName.lowercased()
+        let dict = loadFromBundle()
+
+        if let key = dict.keys.first(where: { $0.lowercased() == lower }) {
+            return key
+        }
+        if let key = aliasKeyIndex()[lower] {
+            return key
+        }
+        if let key = bundleKeyIndex()[lower] {
+            return key
+        }
+        return nil
+    }
+
+    /// All bundle IDs declared under a definition key.
+    nonisolated static func allBundleIDs(forKey key: String) -> [String] {
+        bundleIDsByKeyIndex()[key] ?? []
+    }
+
+    /// Bundle IDs plus alias strings that look like bundle identifiers (for container cache probing).
+    nonisolated static func containerProbeBundleIDs(forKey key: String) -> [String] {
+        var ids = Set(allBundleIDs(forKey: key))
+        for alias in aliasesByKeyIndex()[key] ?? [] where alias.contains(".") {
+            ids.insert(alias)
+        }
+        return Array(ids)
+    }
+
+    private nonisolated static func aliasesByKeyIndex() -> [String: [String]] {
+        if let cachedAliasesByKey { return cachedAliasesByKey }
+        _ = loadFromBundle()
+        return cachedAliasesByKey ?? [:]
+    }
+
+    /// Sandbox app container cache folder when present and non-empty.
+    nonisolated static func containerCacheURL(forBundleID bundleID: String, home: URL) -> URL? {
+        let url = home
+            .appendingPathComponent("Library/Containers/\(bundleID)/Data/Library/Caches", isDirectory: true)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        guard FolderSizing.directoryByteSize(at: url) > 0 else { return nil }
+        return url
+    }
+
+    nonisolated static func record(forKey key: String) -> BundledExplanationRecord? {
+        loadFromBundle()[key]
     }
 
     nonisolated static func safetyInfo(from record: BundledExplanationRecord, reinstallCommand: String? = nil) -> SafetyInfo {

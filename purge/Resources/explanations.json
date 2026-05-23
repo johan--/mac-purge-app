@@ -29,7 +29,7 @@
   {
     "key": "blender",
     "display_name": "Blender 3D App",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "These are temporary files saved by Blender, the 3D design application. Deleting them is safe but Blender may take a little longer to start up the next time you open it.",
     "bundle_ids": [
       "org.blenderfoundation.blender"
@@ -53,7 +53,7 @@
   {
     "key": "cloudkit",
     "display_name": "iCloud Data Sync",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "This folder holds temporary data that helps your Mac sync information with iCloud. Deleting it is generally safe, but some apps may need to re-sync their data from iCloud afterwards.",
     "bundle_ids": [],
     "aliases": [
@@ -77,7 +77,7 @@
   {
     "key": "accountsd",
     "display_name": "Apple Accounts Service",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "This folder supports the system service that manages your Apple ID and connected accounts. Deleting it is usually safe but your Mac may need a moment to rebuild it when you next sign in.",
     "bundle_ids": [
       "com.apple.accountsd"
@@ -90,7 +90,7 @@
   {
     "key": "akd",
     "display_name": "Apple Key Service",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "This is used by a background Apple service that handles authentication and security keys. Deleting it is generally safe but your Mac may need to re-verify some credentials afterwards.",
     "bundle_ids": [
       "com.apple.akd"
@@ -103,7 +103,7 @@
   {
     "key": "amp-library-agent",
     "display_name": "Apple Music Library",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "This folder stores temporary data for your Apple Music library. Deleting it is safe but Apple Music may take a little longer to load your library the next time you open it.",
     "bundle_ids": [
       "com.apple.AMPLibraryAgent"
@@ -116,7 +116,7 @@
   {
     "key": "amsaccountsd",
     "display_name": "App Store Accounts",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "This supports the App Store's sign-in and account system. It is safe to delete and will be rebuilt automatically when you next use the App Store.",
     "bundle_ids": [
       "com.apple.amsaccountsd"
@@ -155,7 +155,7 @@
   {
     "key": "appleaccountd",
     "display_name": "Apple ID Service",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "This folder is used by the service that manages your Apple ID on your Mac. Deleting it is safe but your Mac may briefly need to re-verify your Apple ID.",
     "bundle_ids": [
       "com.apple.appleaccountd"
@@ -168,7 +168,7 @@
   {
     "key": "apple-media-services",
     "display_name": "Apple Media Services",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "This stores temporary data for Apple's media services including the App Store, Apple TV, and Apple Music. Deleting it is safe and these services will rebuild it as needed.",
     "bundle_ids": [
       "com.apple.AppleMediaServices"
@@ -209,7 +209,7 @@
   {
     "key": "authentication-services",
     "display_name": "Sign In with Apple",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "This supports the 'Sign in with Apple' feature used by apps and websites. Deleting it is safe but you may need to re-authenticate with some services.",
     "bundle_ids": [
       "com.apple.AuthenticationServicesCore.AuthenticationServicesAgent"
@@ -235,7 +235,7 @@
   {
     "key": "bird",
     "display_name": "iCloud Drive Sync",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "This folder is used by the background service that keeps iCloud Drive in sync with your Mac. Deleting it is generally safe but iCloud may need a moment to re-index your files.",
     "bundle_ids": [
       "com.apple.bird"
@@ -274,7 +274,7 @@
   {
     "key": "cloudd",
     "display_name": "iCloud Background Service",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "This is used by a background service that handles iCloud data on your Mac. Deleting it is generally safe but iCloud may need a short time to re-sync.",
     "bundle_ids": [
       "com.apple.cloudd"
@@ -313,7 +313,7 @@
   {
     "key": "dataaccessd",
     "display_name": "Contacts & Calendar Sync",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "This folder stores temporary data for the service that syncs your contacts and calendars. Deleting it is safe but your Mac may need to re-sync some data from your accounts.",
     "bundle_ids": [
       "com.apple.dataaccess.dataaccessd"
@@ -404,7 +404,7 @@
   {
     "key": "findmy",
     "display_name": "Find My Service",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "This folder stores temporary data used by the Find My service to track your Apple devices. Deleting it is safe but Find My may take a moment to re-sync location data.",
     "bundle_ids": [
       "com.apple.findmy.fmipcore"
@@ -444,7 +444,7 @@
   {
     "key": "homed",
     "display_name": "Apple Home & HomeKit",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "This folder stores temporary data for the Home app and your connected smart home devices. Deleting it is safe but the Home app may need a moment to re-load your devices.",
     "bundle_ids": [
       "com.apple.homed",
@@ -472,7 +472,7 @@
   {
     "key": "itunes",
     "display_name": "iTunes & Apple Music",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "This folder contains temporary data from iTunes and Apple Music, including artwork and media previews. Deleting it is safe but album artwork and previews may need to reload.",
     "bundle_ids": [
       "com.apple.iTunes",
@@ -500,7 +500,7 @@
   {
     "key": "nsurlsessiond",
     "display_name": "Background Downloads",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "This folder stores temporary data for apps that download content in the background. Deleting it is safe, though any paused background downloads may need to restart.",
     "bundle_ids": [
       "com.apple.nsurlsessiond"
@@ -553,7 +553,7 @@
   {
     "key": "remindd",
     "display_name": "Reminders Service",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "This is temporary data used by the Reminders app in the background. Deleting it is safe but the Reminders app may need a moment to reload when next opened.",
     "bundle_ids": [
       "com.apple.remindd"
@@ -566,7 +566,7 @@
   {
     "key": "safari",
     "display_name": "Safari Browser",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "This contains Safari's temporary browsing data, including website previews and recently visited page data. Deleting it is safe but websites may load slightly slower until the data rebuilds.",
     "bundle_ids": [
       "com.apple.Safari"
@@ -606,7 +606,7 @@
   {
     "key": "spotlight",
     "display_name": "Spotlight Search",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "This folder stores temporary data that helps Spotlight search your Mac quickly. Deleting it is safe but Spotlight may run slower until it rebuilds its data.",
     "bundle_ids": [
       "com.apple.Spotlight"
@@ -739,7 +739,7 @@
   {
     "key": "arc-browser",
     "display_name": "Arc / Dia Browser",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "This stores temporary data for the Arc or Dia web browser. Deleting it is safe but the browser may reload some website data more slowly on next launch.",
     "bundle_ids": [
       "company.thebrowser.browser.helper",
@@ -792,17 +792,6 @@
     "scope": "app_caches"
   },
   {
-    "key": "jetpack-cache",
-    "display_name": "JetBrains IDE Cache",
-    "tag": "medium",
-    "explanation": "This stores temporary files used by JetBrains developer tools such as IntelliJ or WebStorm. Deleting it is safe but your IDE may take a little longer to start up as it rebuilds.",
-    "bundle_ids": [],
-    "aliases": [
-      "JetPackCache"
-    ],
-    "scope": "app_caches"
-  },
-  {
     "key": "ms-playwright",
     "display_name": "Playwright Test Tool",
     "tag": "safe",
@@ -816,8 +805,8 @@
   {
     "key": "node-modules",
     "display_name": "Node.js Packages",
-    "tag": "danger",
-    "explanation": "This folder contains code libraries required by developer projects on your Mac. Deleting it could break apps or development projects that depend on these files — only remove it if you are sure you no longer need the associated project.",
+    "tag": "safe",
+    "explanation": "Code libraries installed for developer projects on your Mac. Purge only shows these for projects that have not been opened in over 6 months, so it is safe to remove them. If you ever need them back, just run npm install in your project folder.",
     "bundle_ids": [],
     "aliases": [
       "node_modules"
@@ -861,7 +850,7 @@
     "key": "dart-tool",
     "display_name": "Flutter Dev Tool",
     "tag": "safe",
-    "explanation": "This is a temporary folder used by the Dart and Flutter development tools. It is safe to delete and will be recreated when you next run a Flutter project.",
+    "explanation": "A temporary folder used by the Dart and Flutter development tools. Safe to delete and will be recreated automatically the next time you run a Flutter project.",
     "bundle_ids": [],
     "aliases": [
       ".dart_tool"
@@ -908,7 +897,7 @@
   {
     "key": "container-managerd",
     "display_name": "App Sandbox Manager",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "This is used by the macOS service that manages isolated storage areas for apps. Deleting it is generally safe but some apps may need to re-establish their storage areas.",
     "bundle_ids": [
       "com.apple.containermanagerd"
@@ -921,7 +910,7 @@
   {
     "key": "storekitagent",
     "display_name": "In-App Purchase Service",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "This stores temporary data for in-app purchases and App Store transactions. Deleting it is safe but apps may need to re-verify purchase status the next time you open them.",
     "bundle_ids": [
       "com.apple.storekitagent"
@@ -934,7 +923,7 @@
   {
     "key": "docker",
     "display_name": "Docker Containers",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "This stores temporary data used by Docker, a developer tool for running software in isolated containers. Deleting it is safe but Docker may need to re-download some container data.",
     "bundle_ids": [
       "com.docker.docker"
@@ -968,7 +957,7 @@
   {
     "key": "swiftpm",
     "display_name": "Swift Package Manager",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "This stores downloaded Swift code libraries used by developer projects. Deleting it is safe but your projects will need to re-download their dependencies next time they are built.",
     "bundle_ids": [
       "org.swift.swiftpm"
@@ -981,7 +970,7 @@
   {
     "key": "zen",
     "display_name": "Zen Browser",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "This stores temporary data for the Zen web browser. Deleting it is safe but the browser may reload some website data more slowly on next launch.",
     "bundle_ids": [],
     "aliases": [
@@ -1131,7 +1120,8 @@
     "explanation": "Temporary files stored by JetBrains IDEs such as IntelliJ, WebStorm, and PyCharm. Safe to delete and will be recreated when you open the IDE again.",
     "bundle_ids": [],
     "aliases": [
-      "JetBrains"
+      "JetBrains",
+      "JetPackCache"
     ],
     "scope": "app_caches"
   },
@@ -1486,7 +1476,8 @@
       ".pyc",
       "pycache"
     ],
-    "scope": "dev_tools"
+    "scope": "dev_tools",
+    "staleness_aware": true
   },
   {
     "key": "uv-cache",
@@ -1535,7 +1526,8 @@
       ".kotlin",
       "kotlin-build"
     ],
-    "scope": "dev_tools"
+    "scope": "dev_tools",
+    "staleness_aware": true
   },
   {
     "key": "android-build",
@@ -1548,7 +1540,8 @@
       "build/outputs",
       "app/build"
     ],
-    "scope": "dev_tools"
+    "scope": "dev_tools",
+    "staleness_aware": true
   },
   {
     "key": "gradle-cache",
@@ -1561,7 +1554,8 @@
       "gradle-cache",
       "caches/modules"
     ],
-    "scope": "dev_tools"
+    "scope": "dev_tools",
+    "staleness_aware": true
   },
   {
     "key": "cocoapods-cache",
@@ -1586,7 +1580,8 @@
       ".build",
       "swift-build"
     ],
-    "scope": "dev_tools"
+    "scope": "dev_tools",
+    "staleness_aware": true
   },
   {
     "key": "rust-target",
@@ -1598,7 +1593,8 @@
       "target",
       "rust-target"
     ],
-    "scope": "dev_tools"
+    "scope": "dev_tools",
+    "staleness_aware": true
   },
   {
     "key": "flutter-cache",
@@ -1611,7 +1607,8 @@
       ".flutter-plugins-dependencies",
       "flutter_cache"
     ],
-    "scope": "dev_tools"
+    "scope": "dev_tools",
+    "staleness_aware": true
   },
   {
     "key": "pub-cache",
@@ -1822,7 +1819,7 @@
   {
     "key": "chrome",
     "display_name": "Google Chrome",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "Temporary browsing data stored by Google Chrome including website caches and previews. Deleting it is safe but websites may load a little slower until Chrome rebuilds the cache.",
     "bundle_ids": [
       "com.google.Chrome"
@@ -1837,7 +1834,7 @@
   {
     "key": "firefox",
     "display_name": "Firefox Browser",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "Temporary browsing data stored by Firefox. Deleting it is safe but websites may load a little slower until Firefox rebuilds the cache.",
     "bundle_ids": [
       "org.mozilla.firefox"
@@ -1851,7 +1848,7 @@
   {
     "key": "brave",
     "display_name": "Brave Browser",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "Temporary browsing data stored by the Brave browser. Deleting it is safe but websites may load a little slower until Brave rebuilds the cache.",
     "bundle_ids": [
       "com.brave.Browser"
@@ -1865,7 +1862,7 @@
   {
     "key": "opera",
     "display_name": "Opera Browser",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "Temporary browsing data stored by Opera. Deleting it is safe but websites may load a little slower until Opera rebuilds the cache.",
     "bundle_ids": [
       "com.operasoftware.Opera"
@@ -2062,7 +2059,7 @@
   {
     "key": "dropbox",
     "display_name": "Dropbox",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "Temporary sync files stored by Dropbox. Deleting them is generally safe but Dropbox may need a moment to re-verify your synced files.",
     "bundle_ids": [
       "com.dropbox.DropboxMacFileHelper"
@@ -2076,7 +2073,7 @@
   {
     "key": "google-drive",
     "display_name": "Google Drive",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "Temporary files stored by Google Drive for syncing. Deleting them is safe but Google Drive may need to re-check your synced files.",
     "bundle_ids": [
       "com.google.GoogleDrive"
@@ -2090,7 +2087,7 @@
   {
     "key": "onedrive",
     "display_name": "Microsoft OneDrive",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "Temporary files stored by OneDrive for syncing. Safe to delete but OneDrive may re-verify your synced files afterwards.",
     "bundle_ids": [
       "com.microsoft.OneDrive"
@@ -2513,7 +2510,7 @@
   {
     "key": "apple-photos",
     "display_name": "Apple Photos",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "Temporary thumbnail and preview data stored by Apple Photos. Safe to delete but Photos may take a while to rebuild previews for your entire library.",
     "bundle_ids": [
       "com.apple.Photos"
@@ -2527,7 +2524,7 @@
   {
     "key": "apple-mail",
     "display_name": "Apple Mail",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "Temporary files stored by Apple Mail including message previews. Deleting them is safe but Mail may take a moment to reload some message previews.",
     "bundle_ids": [
       "com.apple.mail"

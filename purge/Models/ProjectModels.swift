@@ -50,16 +50,6 @@ enum ProjectType: Hashable, Sendable {
         }
     }
 
-    var systemImageName: String {
-        switch self {
-        case .node: return "cube.box.fill"
-        case .rust: return "gearshape.2.fill"
-        case .flutter: return "wind"
-        case .xcode: return "hammer.fill"
-        case .python: return "ladybug.fill"
-        case .androidGradle: return "android"
-        }
-    }
 }
 
 /// High-level grouping of removable folders tied to one project directory.
@@ -80,8 +70,8 @@ enum DeletableArtifactKind: String, Hashable, Sendable {
         case .dotGradle: return "gradle"
         case .target: return "target"
         case .pods: return "Pods"
-        case .dartTool: return "flutter"
-        case .flutterBuild: return "flutter"
+        case .dartTool: return "dart-tool"
+        case .flutterBuild: return "flutter-cache"
         }
     }
 

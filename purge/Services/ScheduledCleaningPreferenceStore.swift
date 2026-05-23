@@ -39,7 +39,7 @@ final class ScheduledCleaningPreferenceStore: ObservableObject {
         ud.register(defaults: [
             UDKeys.scheduledCleanEnabled: false,
             UDKeys.scheduledFrequency: ScheduledCleaningFrequency.monthly.rawValue,
-            UDKeys.scheduledStaleDays: ScheduledCleaningUnusedDaysOption.days60.rawValue
+            UDKeys.scheduledStaleDays: ScheduledCleaningUnusedDaysOption.months6.rawValue
         ])
         isEnabled = ud.bool(forKey: UDKeys.scheduledCleanEnabled)
         if let f = ScheduledCleaningFrequency(rawValue: ud.string(forKey: UDKeys.scheduledFrequency) ?? "") {
@@ -48,10 +48,11 @@ final class ScheduledCleaningPreferenceStore: ObservableObject {
             frequency = .monthly
         }
         let daysRaw = ud.integer(forKey: UDKeys.scheduledStaleDays)
-        if let d = ScheduledCleaningUnusedDaysOption(rawValue: daysRaw == 0 ? 60 : daysRaw) {
+        let defaultDays = ScheduledCleaningUnusedDaysOption.months6.rawValue
+        if let d = ScheduledCleaningUnusedDaysOption(rawValue: daysRaw == 0 ? defaultDays : daysRaw) {
             unusedDays = d
         } else {
-            unusedDays = .days60
+            unusedDays = .months6
         }
     }
 

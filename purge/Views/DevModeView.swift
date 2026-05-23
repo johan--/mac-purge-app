@@ -653,7 +653,7 @@ struct DevToolsView: View {
                         primaryLabel: tool.safetyInfo.headline,
                         formattedSize: tool.formattedSize,
                         safetyInfo: tool.safetyInfo,
-                        icon: symbolIcon(tool.iconName),
+                        brandIcon: .devTool(tool),
                         onRequestUnknownDelete: tool.safetyInfo.level == .unknown
                             ? { store.requestUnknownDeletion(candidates: store.unknownDeletionCandidates(forDevTool: tool)) }
                             : nil,
@@ -687,7 +687,7 @@ struct DevToolsView: View {
                                 primaryLabel: device.safetyInfo.headline,
                                 formattedSize: device.formattedSize,
                                 safetyInfo: device.safetyInfo,
-                                icon: symbolIcon("ipad.and.iphone"),
+                                brandIcon: .sfSymbol("ipad.and.iphone"),
                                 onRequestUnknownDelete: nil,
                                 detailCaption: nil,
                                 reinstallSafety: .notApplicable,
@@ -713,57 +713,17 @@ struct DevToolsView: View {
             if !sortedProjectGroupIndices().isEmpty {
                 Section {
                     ForEach(sortedProjectGroupIndices().map(ProjectGroupRowKey.make)) { row in
-                            let gi = row.groupIndex
-                            let group = store.projectGroups[gi]
-                            let isExpanded = expandedProjectRoots.contains(group.id)
+                        let gi = row.groupIndex
+                        let group = store.projectGroups[gi]
+                        let isExpanded = expandedProjectRoots.contains(group.id)
 
-                            projectDisclosureHeader(for: group, groupIndex: gi, isExpanded: isExpanded)
-                                .listRowInsets(ScanListRowInsets.standard)
-                                .listRowBackground(Color.clear)
-                                .listRowSeparator(.hidden)
-
-                            if isExpanded {
-                                ForEach(
-                                    sortedVisibleArtifactIndices(forGroup: gi).map {
-                                        ProjectArtifactRowKey.make(groupIndex: gi, artifactIndex: $0)
-                                    }
-                                ) { artRow in
-                                    let ai = artRow.artifactIndex
-                                    let art = store.projectGroups[gi].artifacts[ai]
-                                    let artifactPath = art.path
-                                    ScanResultRow(
-                                        isSelected: bindingForArtifact(gi: gi, ai: ai),
-                                        primaryLabel: art.safetyInfo.headline,
-                                        formattedSize: art.formattedSize,
-                                        safetyInfo: art.safetyInfo,
-                                        icon: NSWorkspace.shared.icon(forFileType: "public.folder"),
-                                        onRequestUnknownDelete: art.safetyInfo.level == .unknown
-                                            ? {
-                                                store.requestUnknownDeletion(candidates:
-                                                    store.unknownDeletionCandidates(forArtifact: art)
-                                                )
-                                              }
-                                            : nil,
-                                        detailCaption: art.kind.rowTag,
-                                        reinstallSafety: art.reinstallSafety,
-                                        showUncommittedRepoChanges: !isArtifactMetadataPending(art) && art.gitStatus == .dirty,
-                                        onRecategorize: { store.recategorizeProjectArtifact(groupIndex: gi, artifactIndex: ai) },
-                                        onMarkSafe: { store.markProjectArtifact(groupIndex: gi, artifactIndex: ai, as: .safe) },
-                                        onMarkMedium: { store.markProjectArtifact(groupIndex: gi, artifactIndex: ai, as: .medium) },
-                                        onMarkDanger: { store.markProjectArtifact(groupIndex: gi, artifactIndex: ai, as: .danger) },
-                                        onResetToAutomatic: { store.resetProjectArtifactToAutomatic(groupIndex: gi, artifactIndex: ai) },
-                                        isUserOverride: store.userOverridePaths.contains(artifactPath.standardizedFileURL.path),
-                                        isMetadataPending: isArtifactMetadataPending(art)
-                                    )
-                                    .padding(.leading, 18)
-                                    .listRowInsets(ScanListRowInsets.standard)
-                                    .listRowBackground(Color.clear)
-                                    .listRowSeparator(.hidden)
-                                }
-                            }
-                        }
+                        projectGroupCard(for: group, groupIndex: gi, isExpanded: isExpanded)
+                            .listRowInsets(ScanListRowInsets.standard)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                    }
                 } header: {
-                    Text("Projects")
+                    Text(projectSectionHeading)
                         .font(AppStyle.Typography.metadataEmphasis)
                         .foregroundStyle(.secondary)
                 }
@@ -816,10 +776,10 @@ struct DevToolsView: View {
                 .fill(parentInfo.level == .safe ? AppStyle.safe : parentInfo.level == .danger ? AppStyle.danger : AppStyle.warning)
                 .frame(width: 6, height: 6)
 
-            Image(nsImage: symbolIcon("ipad.and.iphone"))
-                .resizable()
-                .frame(width: 24, height: 24)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+            Image(systemName: "ipad.and.iphone")
+                .font(.system(size: AppStyle.Row.sfSymbolPointSize))
+                .foregroundStyle(.secondary)
+                .frame(width: AppStyle.Row.listIconFrameSize, height: AppStyle.Row.listIconFrameSize)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("iOS Simulators")
@@ -844,22 +804,125 @@ struct DevToolsView: View {
         .accessibilityLabel("iOS Simulators")
     }
 
-    private func projectDisclosureHeader(for group: ProjectGroup, groupIndex gi: Int, isExpanded: Bool) -> some View {
-        HStack(alignment: .center, spacing: 6) {
-            Button {
-                toggleProjectExpanded(group.id)
-            } label: {
-                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 12, height: 44, alignment: .center)
-                    .contentShape(Rectangle())
+    private var projectSectionHeading: String {
+        let kinds = Set(
+            sortedProjectGroupIndices().flatMap { gi in
+                sortedVisibleArtifactIndices(forGroup: gi).map { store.projectGroups[gi].artifacts[$0].kind }
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(isExpanded ? "Collapse project" : "Expand project")
+        )
+        guard !kinds.isEmpty else { return "Developer Projects" }
 
-            projectHeader(for: group, groupIndex: gi)
+        func heading(for kind: DeletableArtifactKind) -> String? {
+            switch kind {
+            case .nodeModules: return "Node.js Packages"
+            case .dartTool, .flutterBuild: return "Flutter Projects"
+            case .dotGradle: return "Android Projects"
+            case .target: return "Rust Projects"
+            case .venv, .pods: return nil
+            }
         }
+
+        let mapped = kinds.filter { heading(for: $0) != nil }
+        let unmapped = kinds.filter { heading(for: $0) == nil }
+        if !unmapped.isEmpty { return "Developer Projects" }
+
+        let headings = Set(mapped.compactMap { heading(for: $0) })
+        if headings.count == 1, let only = headings.first {
+            return only
+        }
+        return "Developer Projects"
+    }
+
+    private func projectGroupCard(for group: ProjectGroup, groupIndex gi: Int, isExpanded: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 10) {
+                TriStateCheckbox(title: "", state: projectSelectTriState(forGroupIndex: gi)) {
+                    toggleProjectEligibleSelection(groupIndex: gi)
+                }
+                .frame(width: 24)
+
+                Button {
+                    toggleProjectExpanded(group.id)
+                } label: {
+                    HStack(alignment: .center, spacing: 10) {
+                        AdaptiveBrandIconImage(
+                            source: .projectGroup(group),
+                            squareSize: AppStyle.Row.projectGroupIconSize,
+                            cornerRadius: AppStyle.Row.projectGroupIconCornerRadius
+                        )
+                        .accessibilityLabel(projectGroupIconAccessibilityLabel(for: group))
+                        Text(group.displayName)
+                            .font(AppStyle.Typography.rowTitle)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 12)
+                            .padding(.trailing, AppStyle.Spacing.xSmall)
+                            .accessibilityHidden(true)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isExpanded ? "Collapse project" : "Expand project")
+            }
+            .padding(.vertical, 2)
+            .padding(.horizontal, AppStyle.Spacing.xSmall)
+            .frame(minHeight: AppStyle.Row.parentHeight)
+
+            if isExpanded {
+                projectArtifactRows(groupIndex: gi)
+            }
+        }
+        .background(AppStyle.elevated.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Project \(group.displayName)")
+        .accessibilityHint("Grouped dev tool cleanup targets")
+    }
+
+    @ViewBuilder
+    private func projectArtifactRows(groupIndex gi: Int) -> some View {
+        ForEach(
+            sortedVisibleArtifactIndices(forGroup: gi).map {
+                ProjectArtifactRowKey.make(groupIndex: gi, artifactIndex: $0)
+            }
+        ) { artRow in
+            projectArtifactRow(groupIndex: gi, artifactIndex: artRow.artifactIndex)
+        }
+    }
+
+    @ViewBuilder
+    private func projectArtifactRow(groupIndex gi: Int, artifactIndex ai: Int) -> some View {
+        let art = store.projectGroups[gi].artifacts[ai]
+        let artifactPath = art.path.standardizedFileURL.path
+        let unknownHandler: (() -> Void)? = art.safetyInfo.level == .unknown
+            ? { store.requestUnknownDeletion(candidates: store.unknownDeletionCandidates(forArtifact: art)) }
+            : nil
+
+        ScanResultRow(
+            isSelected: bindingForArtifact(gi: gi, ai: ai),
+            primaryLabel: art.safetyInfo.headline,
+            formattedSize: art.formattedSize,
+            safetyInfo: art.safetyInfo,
+            brandIcon: nil,
+            onRequestUnknownDelete: unknownHandler,
+            detailCaption: nil,
+            reinstallSafety: nil,
+            showUncommittedRepoChanges: !isArtifactMetadataPending(art) && art.gitStatus == .dirty,
+            onRecategorize: { store.recategorizeProjectArtifact(groupIndex: gi, artifactIndex: ai) },
+            onMarkSafe: { store.markProjectArtifact(groupIndex: gi, artifactIndex: ai, as: .safe) },
+            onMarkMedium: { store.markProjectArtifact(groupIndex: gi, artifactIndex: ai, as: .medium) },
+            onMarkDanger: { store.markProjectArtifact(groupIndex: gi, artifactIndex: ai, as: .danger) },
+            onResetToAutomatic: { store.resetProjectArtifactToAutomatic(groupIndex: gi, artifactIndex: ai) },
+            isUserOverride: store.userOverridePaths.contains(artifactPath),
+            showsBulkCheckbox: false,
+            isMetadataPending: isArtifactMetadataPending(art),
+            showsCardChrome: false,
+            showsLeadingIcon: false
+        )
+        .padding(.trailing, AppStyle.Spacing.xSmall)
+        .padding(.leading, AppStyle.Row.projectArtifactLeadingInset)
     }
 
     private func toggleProjectExpanded(_ groupID: String) {
@@ -888,42 +951,6 @@ struct DevToolsView: View {
                 store.setProjectArtifactSelected(groupIndex: gi, artifactIndex: ai, isSelected: newVal)
             }
         )
-    }
-
-    private func projectHeader(for group: ProjectGroup, groupIndex gi: Int) -> some View {
-        HStack(alignment: .center, spacing: 10) {
-            TriStateCheckbox(title: "", state: projectSelectTriState(forGroupIndex: gi)) {
-                toggleProjectEligibleSelection(groupIndex: gi)
-            }
-            .frame(width: 24)
-            ForEach(group.inferredTypes, id: \.self) { type in
-                Image(systemName: type.systemImageName)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AppStyle.accent)
-                    .help(type.displayName)
-                    .accessibilityLabel(type.displayName)
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(group.displayName)
-                    .font(AppStyle.Typography.rowTitle)
-                Text(group.rootPath.path)
-                    .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 8)
-            Text(group.formattedTotal)
-                .font(AppStyle.Typography.rowTitle)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-        }
-        .padding(.vertical, 2)
-        .padding(.horizontal, AppStyle.Spacing.xSmall)
-        .frame(minHeight: AppStyle.Row.parentHeight)
-        .background(AppStyle.elevated.opacity(0.5))
-        .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous))
-        .accessibilityLabel("Project \(group.displayName)")
-        .accessibilityHint("Grouped dev tool cleanup targets")
     }
 
     private func toggleDeveloperSelectAll() {
@@ -995,11 +1022,12 @@ struct DevToolsView: View {
         }.max() ?? .distantPast
     }
 
-    private func symbolIcon(_ systemName: String) -> NSImage {
-        let config = NSImage.SymbolConfiguration(pointSize: 18, weight: .regular)
-        return NSImage(systemSymbolName: systemName, accessibilityDescription: nil)?
-            .withSymbolConfiguration(config)
-            ?? NSWorkspace.shared.icon(forFileType: "public.folder")
+    private func projectGroupIconAccessibilityLabel(for group: ProjectGroup) -> String {
+        let types = group.inferredTypes.map(\.displayName).joined(separator: ", ")
+        if types.isEmpty {
+            return "Project"
+        }
+        return "Project, \(types)"
     }
 }
 

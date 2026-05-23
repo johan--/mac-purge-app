@@ -10,8 +10,8 @@ final class CacheScanner {
     ]
 
     func scanCaches() async -> [CacheItem] {
-        let cachesURL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Caches", isDirectory: true)
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let cachesURL = home.appendingPathComponent("Library/Caches", isDirectory: true)
 
         let contents: [URL]
         do {
@@ -25,42 +25,28 @@ final class CacheScanner {
         }
 
         var items: [CacheItem] = []
+        var collectedPaths = Set<String>()
+        var keysNeedingContainers = Set<String>()
+
         for directory in contents {
-            do {
-                let values = try directory.resourceValues(forKeys: [.isDirectoryKey, .contentModificationDateKey])
-                guard values.isDirectory == true else { continue }
-
-                let bundleID = directory.lastPathComponent
-                guard !excludedFromGeneralScan.contains(bundleID) else { continue }
-
-                let size = FolderSizing.directoryByteSize(at: directory)
-                let modified = values.contentModificationDate ?? .distantPast
-                let fallbackAppName = appNameFromBundleID(bundleID) ?? bundleID
-                let safetyInfo = ExplanationResolver.initialSafetyForCacheFolder(
-                    folderName: bundleID,
-                    friendlyHeadline: fallbackAppName,
-                    path: directory
-                )
-
-                items.append(
-                    CacheItem(
-                        appName: safetyInfo.headline,
-                        bundleID: bundleID,
-                        path: directory,
-                        sizeBytes: size,
-                        lastModified: modified,
-                        isSelected: false,
-                        safetyInfo: safetyInfo,
-                        reinstallSafety: .notApplicable,
-                        gitStatus: .unknown
-                    )
-                )
-            } catch {
-                continue
+            guard let item = cacheItem(
+                at: directory,
+                home: home,
+                collectedPaths: &collectedPaths
+            ) else { continue }
+            items.append(item)
+            if let key = item.definitionKey {
+                keysNeedingContainers.insert(key)
             }
         }
 
-        return items.sorted { $0.sizeBytes > $1.sizeBytes }
+        items.append(contentsOf: containerCacheItems(
+            home: home,
+            keys: keysNeedingContainers,
+            collectedPaths: &collectedPaths
+        ))
+
+        return DefinitionCacheGrouper.group(items)
     }
 
     func scanSystemJunk() async -> [CacheItem] {
@@ -107,30 +93,116 @@ final class CacheScanner {
             guard size > 0 else { continue }
 
             let modified = FolderSizing.contentModificationDate(at: url)
+            let folderName = url.lastPathComponent
             let safetyInfo = ExplanationResolver.initialSafetyForCacheFolder(
-                folderName: url.lastPathComponent,
+                folderName: folderName,
                 friendlyHeadline: displayName,
                 path: url
             )
 
-            items.append(CacheItem(
-                appName: displayName,
-                bundleID: url.lastPathComponent,
-                path: url,
-                sizeBytes: size,
-                lastModified: modified,
-                isSelected: false,
-                safetyInfo: safetyInfo,
-                reinstallSafety: .notApplicable,
-                gitStatus: .unknown
-            ))
+            items.append(
+                CacheItem(
+                    definitionKey: ExplanationDatabase.definitionKey(forFolderName: folderName),
+                    location: CacheLocation(
+                        path: url,
+                        sizeBytes: size,
+                        lastModified: modified,
+                        folderName: folderName
+                    ),
+                    appName: displayName,
+                    safetyInfo: safetyInfo
+                )
+            )
         }
 
-        return items
+        return DefinitionCacheGrouper.group(items)
     }
 
     func calculateFolderSize(at url: URL) -> Int64 {
         FolderSizing.directoryByteSize(at: url)
+    }
+
+    private func cacheItem(
+        at directory: URL,
+        home: URL,
+        collectedPaths: inout Set<String>
+    ) -> CacheItem? {
+        do {
+            let values = try directory.resourceValues(forKeys: [.isDirectoryKey, .contentModificationDateKey])
+            guard values.isDirectory == true else { return nil }
+
+            let bundleID = directory.lastPathComponent
+            guard !excludedFromGeneralScan.contains(bundleID) else { return nil }
+
+            let pathKey = directory.standardizedFileURL.path
+            guard !collectedPaths.contains(pathKey) else { return nil }
+            collectedPaths.insert(pathKey)
+
+            let size = FolderSizing.directoryByteSize(at: directory)
+            let modified = values.contentModificationDate ?? .distantPast
+            let fallbackAppName = appNameFromBundleID(bundleID) ?? bundleID
+            let safetyInfo = ExplanationResolver.initialSafetyForCacheFolder(
+                folderName: bundleID,
+                friendlyHeadline: fallbackAppName,
+                path: directory
+            )
+
+            return CacheItem(
+                definitionKey: ExplanationDatabase.definitionKey(forFolderName: bundleID),
+                location: CacheLocation(
+                    path: directory,
+                    sizeBytes: size,
+                    lastModified: modified,
+                    folderName: bundleID
+                ),
+                appName: safetyInfo.headline,
+                safetyInfo: safetyInfo
+            )
+        } catch {
+            return nil
+        }
+    }
+
+    private func containerCacheItems(
+        home: URL,
+        keys: Set<String>,
+        collectedPaths: inout Set<String>
+    ) -> [CacheItem] {
+        var items: [CacheItem] = []
+        for key in keys {
+            for bundleID in ExplanationDatabase.containerProbeBundleIDs(forKey: key) {
+                guard let containerURL = ExplanationDatabase.containerCacheURL(forBundleID: bundleID, home: home) else {
+                    continue
+                }
+                let pathKey = containerURL.standardizedFileURL.path
+                guard !collectedPaths.contains(pathKey) else { continue }
+                collectedPaths.insert(pathKey)
+
+                let size = FolderSizing.directoryByteSize(at: containerURL)
+                let modified = FolderSizing.contentModificationDate(at: containerURL)
+                let fallbackAppName = appNameFromBundleID(bundleID) ?? bundleID
+                let safetyInfo = ExplanationResolver.initialSafetyForCacheFolder(
+                    folderName: bundleID,
+                    friendlyHeadline: fallbackAppName,
+                    path: containerURL
+                )
+
+                items.append(
+                    CacheItem(
+                        definitionKey: key,
+                        location: CacheLocation(
+                            path: containerURL,
+                            sizeBytes: size,
+                            lastModified: modified,
+                            folderName: bundleID
+                        ),
+                        appName: safetyInfo.headline,
+                        safetyInfo: safetyInfo
+                    )
+                )
+            }
+        }
+        return items
     }
 
     private func appNameFromBundleID(_ bundleID: String) -> String? {

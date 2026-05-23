@@ -42,4 +42,26 @@ extension SafetyInfo {
             reinstallCommand: reinstallCommand
         )
     }
+
+    /// Safety for project artifacts shown after staleness filtering — always Safe to Clean unless user-overridden.
+    nonisolated static func forStaleProjectArtifact(
+        kind: DeletableArtifactKind,
+        path: URL,
+        reinstallCommand: String? = nil
+    ) -> SafetyInfo {
+        let base = fromExplanationDatabase(
+            key: kind.explanationKey,
+            friendlyFallback: kind.rowTag,
+            reinstallCommand: reinstallCommand,
+            path: path
+        )
+        if UserOverridesStore.read(path: path) != nil { return base }
+        return SafetyInfo(
+            level: .safe,
+            headline: base.headline,
+            explanation: base.explanation,
+            recoverySteps: base.recoverySteps,
+            reinstallCommand: base.reinstallCommand
+        )
+    }
 }

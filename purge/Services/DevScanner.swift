@@ -11,16 +11,18 @@ final class DevScanner {
     /// Maps scanner labels to keys in `explanations.json`.
     private static let toolExplanationKeys: [String: String] = [
         "Xcode Derived Data": "DerivedData",
-        "Xcode iOS DeviceSupport": "iOS DeviceSupport",
-        "Xcode Archives": "archives",
-        "Xcode Caches": "xcode",
-        "Homebrew Cache": "homebrew",
-        "Gradle Cache": "gradle",
+        "Xcode iOS DeviceSupport": "xcode-device-support",
+        "Xcode Archives": "xcode-archives",
+        "Xcode Caches": "xcode-app",
+        "Homebrew Cache": "homebrew-cache",
+        "Gradle Cache": "gradle-cache",
         "Docker Desktop": "docker",
-        "npm Cache": "npm",
-        "pnpm Store": "pnpm",
-        "Yarn Cache": "yarn",
-        "CocoaPods": "cocoapods",
+        "npm Cache": "npm-cache",
+        "pnpm Store": "pnpm-store",
+        "Yarn Cache": "yarn-cache",
+        "CocoaPods": "cocoapods-cache",
+        "Flutter Cache": "flutter-cache",
+        "Android SDK .gradle": "android-sdk",
         "Git Worktrees": "gitworktrees",
         "VS Code Cache": "vscode",
         "Cursor Cache": "cursor",
@@ -38,16 +40,59 @@ final class DevScanner {
         "Vagrant Cache": "vagrant",
         "Zsh Cache": "zsh",
         "Electron App Caches": "electron",
-        "Playwright Browsers": "playwright"
+        "Playwright Browsers": "ms-playwright"
     ]
 
     private func safetyInfo(forToolLabel toolLabel: String, primaryPath: URL?) -> SafetyInfo {
-        let key = Self.toolExplanationKeys[toolLabel] ?? toolLabel
+        Self.automaticSafetyInfo(forDevToolLabel: toolLabel, primaryPath: primaryPath)
+    }
+
+    /// Shared automatic safety resolution for global dev tool rows (scan + reset/recategorize).
+    nonisolated static func automaticSafetyInfo(forDevToolLabel toolLabel: String, primaryPath: URL?) -> SafetyInfo {
+        let key = toolExplanationKeys[toolLabel] ?? toolLabel
+        if toolLabel == "Xcode Archives", let path = primaryPath {
+            let base = SafetyInfo.fromExplanationDatabase(
+                key: key,
+                friendlyFallback: toolLabel,
+                path: path
+            )
+            if UserOverridesStore.read(path: path) != nil { return base }
+            if folderContainsXCArchive(at: path) { return base }
+            return SafetyInfo(
+                level: .safe,
+                headline: base.headline,
+                explanation: base.explanation,
+                recoverySteps: base.recoverySteps,
+                reinstallCommand: base.reinstallCommand
+            )
+        }
         return SafetyInfo.fromExplanationDatabase(
             key: key,
             friendlyFallback: toolLabel,
             path: primaryPath
         )
+    }
+
+    nonisolated static func folderContainsXCArchive(at root: URL) -> Bool {
+        guard FileManager.default.fileExists(atPath: root.path) else { return false }
+        guard let enumerator = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else { return false }
+
+        for case let url as URL in enumerator {
+            guard url.lastPathComponent.hasSuffix(".xcarchive") else { continue }
+            var isDir: ObjCBool = false
+            if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
+                return true
+            }
+        }
+        return false
+    }
+
+    nonisolated static func daysBetween(_ start: Date, _ end: Date) -> Int {
+        Calendar.current.dateComponents([.day], from: start, to: end).day ?? 0
     }
 
     func scanDevTools() async -> DeveloperScanOutcome {
@@ -412,105 +457,93 @@ final class DevScanner {
     private func scanGlobalCaches() -> [DevTool] {
         let home = FileManager.default.homeDirectoryForCurrentUser
 
-        let mapped: [(String, String, [URL])] = [
-            ("Xcode Derived Data", "hammer.fill", [home.appendingPathComponent("Library/Developer/Xcode/DerivedData", isDirectory: true)]),
-            ("Xcode Archives", "archivebox.fill", [home.appendingPathComponent("Library/Developer/Xcode/Archives", isDirectory: true)]),
-            ("Xcode iOS DeviceSupport", "iphone.gen3", [home.appendingPathComponent("Library/Developer/Xcode/iOS DeviceSupport", isDirectory: true)]),
-            ("Xcode Caches", "shippingbox.fill", [home.appendingPathComponent("Library/Caches/com.apple.dt.Xcode", isDirectory: true)]),
-            ("CocoaPods", "shippingbox", [home.appendingPathComponent(".cocoapods/repos", isDirectory: true)]),
-            ("Homebrew Cache", "cup.and.saucer.fill", [home.appendingPathComponent("Library/Caches/Homebrew", isDirectory: true)]),
-            ("npm Cache", "shippingbox.circle.fill", [home.appendingPathComponent(".npm/_cacache", isDirectory: true)]),
-            ("pnpm Store", "shippingbox.circle", [home.appendingPathComponent(".pnpm-store", isDirectory: true)]),
-            ("Yarn Cache", "tray.full.fill", [home.appendingPathComponent("Library/Caches/Yarn", isDirectory: true)]),
-            ("Gradle Cache", "gearshape.2.fill", [home.appendingPathComponent(".gradle/caches", isDirectory: true)]),
-            ("Flutter Cache", "swift", [home.appendingPathComponent(".flutter", isDirectory: true)]),
-            ("Android SDK .gradle", "android", [home.appendingPathComponent(".android", isDirectory: true)]),
-            ("Docker Desktop", "shippingbox.fill", [home.appendingPathComponent("Library/Containers/com.docker.docker", isDirectory: true)]),
+        let mapped: [(String, [URL])] = [
+            ("Xcode Derived Data", [home.appendingPathComponent("Library/Developer/Xcode/DerivedData", isDirectory: true)]),
+            ("Xcode Archives", [home.appendingPathComponent("Library/Developer/Xcode/Archives", isDirectory: true)]),
+            ("Xcode iOS DeviceSupport", [home.appendingPathComponent("Library/Developer/Xcode/iOS DeviceSupport", isDirectory: true)]),
+            ("Xcode Caches", [home.appendingPathComponent("Library/Caches/com.apple.dt.Xcode", isDirectory: true)]),
+            ("CocoaPods", [home.appendingPathComponent(".cocoapods/repos", isDirectory: true)]),
+            ("Homebrew Cache", [home.appendingPathComponent("Library/Caches/Homebrew", isDirectory: true)]),
+            ("npm Cache", [home.appendingPathComponent(".npm/_cacache", isDirectory: true)]),
+            ("pnpm Store", [home.appendingPathComponent(".pnpm-store", isDirectory: true)]),
+            ("Yarn Cache", [home.appendingPathComponent("Library/Caches/Yarn", isDirectory: true)]),
+            ("Gradle Cache", [home.appendingPathComponent(".gradle/caches", isDirectory: true)]),
+            ("Flutter Cache", [home.appendingPathComponent(".flutter", isDirectory: true)]),
+            ("Android SDK .gradle", [home.appendingPathComponent(".android", isDirectory: true)]),
+            ("Docker Desktop", [home.appendingPathComponent("Library/Containers/com.docker.docker", isDirectory: true)]),
 
-            // Git
-            ("Git Worktrees", "arrow.triangle.branch", [
+            ("Git Worktrees", [
                 home.appendingPathComponent(".git/worktrees", isDirectory: true)
             ]),
 
-            // IDE Caches
-            ("VS Code Cache", "chevron.left.forwardslash.chevron.right", [
+            ("VS Code Cache", [
                 home.appendingPathComponent("Library/Application Support/Code/Cache", isDirectory: true),
                 home.appendingPathComponent("Library/Application Support/Code/CachedData", isDirectory: true),
                 home.appendingPathComponent("Library/Application Support/Code/CachedExtensionVSIXs", isDirectory: true),
                 home.appendingPathComponent("Library/Application Support/Code/User/workspaceStorage", isDirectory: true)
             ]),
-            ("Cursor Cache", "cursorarrow", [
+            ("Cursor Cache", [
                 home.appendingPathComponent("Library/Application Support/Cursor/Cache", isDirectory: true),
                 home.appendingPathComponent("Library/Application Support/Cursor/CachedData", isDirectory: true),
                 home.appendingPathComponent("Library/Application Support/Cursor/User/workspaceStorage", isDirectory: true)
             ]),
-            ("JetBrains Cache", "gearshape.2.fill", [
+            ("JetBrains Cache", [
                 home.appendingPathComponent("Library/Caches/JetBrains", isDirectory: true),
                 home.appendingPathComponent("Library/Application Support/JetBrains", isDirectory: true)
             ]),
-            ("Zed Cache", "bolt.fill", [
+            ("Zed Cache", [
                 home.appendingPathComponent("Library/Application Support/Zed/db", isDirectory: true),
                 home.appendingPathComponent("Library/Caches/Zed", isDirectory: true)
             ]),
 
-            // Go
-            ("Go Module Cache", "arrow.right.circle.fill", [
+            ("Go Module Cache", [
                 home.appendingPathComponent("go/pkg/mod/cache", isDirectory: true),
                 home.appendingPathComponent(".cache/go-build", isDirectory: true)
             ]),
 
-            // Java
-            ("Maven Cache", "cup.and.saucer.fill", [
+            ("Maven Cache", [
                 home.appendingPathComponent(".m2/repository", isDirectory: true)
             ]),
-            ("SBT Cache", "terminal.fill", [
+            ("SBT Cache", [
                 home.appendingPathComponent(".sbt", isDirectory: true),
                 home.appendingPathComponent(".ivy2/cache", isDirectory: true)
             ]),
 
-            // Ruby
-            ("Ruby Gems", "circle.hexagongrid.fill", [
+            ("Ruby Gems", [
                 home.appendingPathComponent(".gem", isDirectory: true)
             ]),
-            ("Bundler Cache", "shippingbox.circle.fill", [
+            ("Bundler Cache", [
                 home.appendingPathComponent(".bundle/cache", isDirectory: true)
             ]),
 
-            // PHP
-            ("Composer Cache", "globe", [
+            ("Composer Cache", [
                 home.appendingPathComponent(".composer/cache", isDirectory: true)
             ]),
 
-            // Rust
-            ("Cargo Registry", "gearshape.fill", [
+            ("Cargo Registry", [
                 home.appendingPathComponent(".cargo/registry", isDirectory: true),
                 home.appendingPathComponent(".cargo/git", isDirectory: true)
             ]),
 
-            // Terraform
-            ("Terraform Cache", "cloud.fill", [
+            ("Terraform Cache", [
                 home.appendingPathComponent(".terraform.d/plugin-cache", isDirectory: true)
             ]),
 
-            // CI/CD
-            ("GitHub Actions Cache", "arrow.clockwise.circle.fill", [
+            ("GitHub Actions Cache", [
                 home.appendingPathComponent(".cache/act", isDirectory: true)
             ]),
 
-            // Virtualization
-            ("Vagrant Cache", "server.rack", [
+            ("Vagrant Cache", [
                 home.appendingPathComponent(".vagrant.d/boxes", isDirectory: true),
                 home.appendingPathComponent(".vagrant.d/tmp", isDirectory: true)
             ]),
 
-            // Shell
-            ("Zsh Cache", "terminal", [
+            ("Zsh Cache", [
                 home.appendingPathComponent(".zsh_sessions", isDirectory: true),
                 home.appendingPathComponent(".zcompdump", isDirectory: false)
             ]),
 
-            // Electron apps
-            ("Electron App Caches", "app.badge", [
+            ("Electron App Caches", [
                 home.appendingPathComponent("Library/Application Support/Slack/Cache", isDirectory: true),
                 home.appendingPathComponent("Library/Application Support/Slack/Code Cache", isDirectory: true),
                 home.appendingPathComponent("Library/Application Support/discord/Cache", isDirectory: true),
@@ -519,8 +552,7 @@ final class DevScanner {
                 home.appendingPathComponent("Library/Application Support/Figma/Cache", isDirectory: true)
             ]),
 
-            // Playwright
-            ("Playwright Browsers", "theatermasks.fill", [
+            ("Playwright Browsers", [
                 home.appendingPathComponent("Library/Caches/ms-playwright", isDirectory: true),
                 home.appendingPathComponent(".cache/ms-playwright", isDirectory: true)
             ])
@@ -534,9 +566,10 @@ final class DevScanner {
             "Docker Desktop"
         ]
 
-        return mapped.map { entry -> DevTool in
+        let built = mapped.map { entry -> DevTool in
             let label = entry.0
-            let existing = entry.2.filter {
+            let paths = entry.1
+            let existing = paths.filter {
                 FileManager.default.fileExists(atPath: $0.path)
             }
 
@@ -551,19 +584,74 @@ final class DevScanner {
                 }
             }
 
+            let definitionKey = Self.toolExplanationKeys[label] ?? label
             return DevTool(
+                definitionKey: definitionKey,
                 toolName: label,
-                iconName: entry.1,
-                paths: entry.2,
+                paths: paths,
                 sizeBytes: size,
                 isSelected: false,
                 isDetected: !existing.isEmpty,
                 safetyInfo: safetyInfo(
                     forToolLabel: label,
-                    primaryPath: entry.2.first
+                    primaryPath: paths.first
                 )
             )
         }
+        return groupDevToolsByDefinitionKey(built)
+    }
+
+    private func groupDevToolsByDefinitionKey(_ tools: [DevTool]) -> [DevTool] {
+        var byKey: [String: [DevTool]] = [:]
+        for tool in tools {
+            byKey[tool.definitionKey, default: []].append(tool)
+        }
+
+        return byKey.map { key, members in
+            mergeDevTools(definitionKey: key, members: members)
+        }
+        .sorted { $0.sizeBytes > $1.sizeBytes }
+    }
+
+    private func mergeDevTools(definitionKey: String, members: [DevTool]) -> DevTool {
+        guard members.count > 1 else { return members[0] }
+
+        let anchor = members.max(by: { $0.paths.count < $1.paths.count }) ?? members[0]
+        var seenPaths = Set<String>()
+        var mergedPaths: [URL] = []
+        for member in members {
+            for path in member.paths {
+                let pathKey = path.standardizedFileURL.path
+                guard !seenPaths.contains(pathKey) else { continue }
+                seenPaths.insert(pathKey)
+                mergedPaths.append(path)
+            }
+        }
+
+        let xcodeAndDockerLabels: Set<String> = [
+            "Xcode Derived Data",
+            "Xcode Archives",
+            "Xcode iOS DeviceSupport",
+            "Xcode Caches",
+            "Docker Desktop"
+        ]
+        let existing = mergedPaths.filter { FileManager.default.fileExists(atPath: $0.path) }
+        let size: Int64
+        if members.contains(where: { xcodeAndDockerLabels.contains($0.toolName) }) {
+            size = existing.reduce(Int64(0)) { $0 + accurateFolderSize(at: $1) }
+        } else {
+            size = existing.reduce(Int64(0)) { $0 + FolderSizing.directoryByteSize(at: $1) }
+        }
+
+        return DevTool(
+            definitionKey: definitionKey,
+            toolName: anchor.toolName,
+            paths: mergedPaths,
+            sizeBytes: size,
+            isSelected: members.contains(where: \.isSelected),
+            isDetected: !existing.isEmpty,
+            safetyInfo: anchor.safetyInfo
+        )
     }
 
     // MARK: - Project-aware scan
@@ -779,13 +867,19 @@ final class DevScanner {
                         return built
                     }
 
-                    guard !sized.isEmpty else { return nil }
+                    let staleDays = ScheduledCleaningUnusedDaysOption.currentDeveloperArtifactStaleDays()
+                    let now = Date()
+                    let staleArtifacts = sized.filter {
+                        Self.daysBetween($0.lastModified, now) >= staleDays
+                    }
+
+                    guard !staleArtifacts.isEmpty else { return nil }
 
                     return ProjectGroup(
                         displayName: rootURL.lastPathComponent,
                         rootPath: rootURL,
                         inferredTypes: types,
-                        artifacts: sized
+                        artifacts: staleArtifacts
                     )
                 }
             }
@@ -819,11 +913,10 @@ final class DevScanner {
             guard isDir else { return }
 
             let reinstall = Self.reinstallCommand(kind: kind, root: root)
-            let safety = SafetyInfo.fromExplanationDatabase(
-                key: kind.explanationKey,
-                friendlyFallback: kind.rowTag,
-                reinstallCommand: reinstall,
-                path: url
+            let safety = SafetyInfo.forStaleProjectArtifact(
+                kind: kind,
+                path: url,
+                reinstallCommand: reinstall
             )
             let reinstallStatus = ReinstallSafetyEvaluator.evaluate(artifactKind: kind, artifactURL: url)
             artifacts.append(

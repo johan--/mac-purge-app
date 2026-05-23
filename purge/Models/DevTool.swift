@@ -2,8 +2,9 @@ import Foundation
 
 struct DevTool: Identifiable, Hashable {
     let id = UUID()
+    /// Canonical `explanations.json` key used for safety copy and grouping.
+    let definitionKey: String
     let toolName: String
-    let iconName: String
     let paths: [URL]
     let sizeBytes: Int64
     var isSelected: Bool

@@ -396,21 +396,21 @@ private func makePreviewStore() -> PurgeStore {
     store.hasFullDiskAccess = true
     store.cacheItems = [
         CacheItem(
+            definitionKey: "safari",
+            location: CacheLocation(
+                path: URL(fileURLWithPath: "/Users/preview/Library/Caches/com.apple.Safari"),
+                sizeBytes: 845_000_000,
+                lastModified: Date(),
+                folderName: "com.apple.Safari"
+            ),
             appName: "Safari",
-            bundleID: "com.apple.Safari",
-            path: URL(fileURLWithPath: "/Users/preview/Library/Caches/com.apple.Safari"),
-            sizeBytes: 845_000_000,
-            lastModified: Date(),
-            isSelected: false,
             safetyInfo: SafetyInfo(
                 level: .safe,
                 headline: "Application caches are safe to remove",
                 explanation: "Apps recreate cache files automatically after relaunch.",
                 recoverySteps: "Reopen the app and continue using it.",
                 reinstallCommand: nil
-            ),
-            reinstallSafety: .notApplicable,
-            gitStatus: .unknown
+            )
         )
     ]
     return store

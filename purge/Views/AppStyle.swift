@@ -21,6 +21,15 @@ enum AppStyle {
         static let compactHeight: CGFloat = 36
         static let parentHeight: CGFloat = 44
         static let listRowMinHeight: CGFloat = 52
+        /// Scan row leading icon frame (brand PNGs and SF Symbol fallbacks).
+        static let listIconFrameSize: CGFloat = 28
+        /// Point size for SF Symbol row icons (e.g. simulator host, folder fallback).
+        static let sfSymbolPointSize: CGFloat = 18
+        /// Project group headers (node_modules, Flutter, etc.) — slightly smaller than scan rows (28pt).
+        static let projectGroupIconSize: CGFloat = 16
+        static let projectGroupIconCornerRadius: CGFloat = 5
+        /// Aligns expanded artifact text with the project title (parent checkbox + spacing).
+        static let projectArtifactLeadingInset: CGFloat = 34
     }
 
     enum Typography {

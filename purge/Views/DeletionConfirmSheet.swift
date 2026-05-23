@@ -49,6 +49,10 @@ struct DeletionConfirmSheet: View {
         .frame(minWidth: 560, minHeight: showsElevatedRiskLayout ? 480 : 420)
     }
 
+    private func locationLabel(for item: PurgeStore.DeletionCandidate) -> String {
+        item.subtitle ?? item.path.lastPathComponent
+    }
+
     private var elevatedRiskLayout: some View {
         VStack(alignment: .leading, spacing: 16) {
             elevatedWarningHeader
@@ -109,7 +113,7 @@ struct DeletionConfirmSheet: View {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(item.title)
                                             .font(.subheadline.weight(.medium))
-                                        Text(item.path.path)
+                                        Text(locationLabel(for: item))
                                             .font(.caption2)
                                             .foregroundStyle(.tertiary)
                                             .lineLimit(1)
@@ -239,7 +243,7 @@ struct DeletionConfirmSheet: View {
                             HStack {
                                 VStack(alignment: .leading) {
                                     Text(item.title)
-                                    Text(item.path.path)
+                                    Text(locationLabel(for: item))
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                         .lineLimit(1)

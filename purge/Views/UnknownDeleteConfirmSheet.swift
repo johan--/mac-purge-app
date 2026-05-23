@@ -17,6 +17,10 @@ struct UnknownDeleteConfirmSheet: View {
         candidates.first?.safetyInfo.explanation ?? ""
     }
 
+    private func locationLabel(for item: PurgeStore.DeletionCandidate) -> String {
+        item.subtitle ?? item.path.lastPathComponent
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top, spacing: 12) {
@@ -47,7 +51,7 @@ struct UnknownDeleteConfirmSheet: View {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(candidates, id: \.path) { item in
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(item.path.path)
+                                Text(locationLabel(for: item))
                                     .font(.caption)
                                     .foregroundStyle(.tertiary)
                                     .lineLimit(3)

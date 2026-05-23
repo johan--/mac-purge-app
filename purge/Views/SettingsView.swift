@@ -415,8 +415,8 @@ struct SettingsView: View {
 
     private var scheduleSummary: String {
         """
-        Every \(prefs.frequency.summaryPhrase), we will quietly remove safe files \
-        that have not been touched in over \(prefs.unusedDays.rawValue) days. \
+        Every \(prefs.frequency.summaryPhrase), we will quietly remove safe files and stale developer \
+        artifacts untouched for \(prefs.unusedDays.summaryDurationPhrase). \
         Your actual work is never deleted.
         """
     }
