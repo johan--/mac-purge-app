@@ -78,6 +78,8 @@ final class PurgeStore: ObservableObject {
     @Published var deletionSheetCandidates: [DeletionCandidate]?
     @Published var pendingUnknownDeletion: UnknownDeletionPayload?
     @Published var lastDeletionReport: DeletionReport?
+    /// When set, `ContentView` shows the onboarding celebration overlay instead of `DeletionSummarySheet`.
+    @Published var onboardingCelebrationFreedBytes: Int64?
     @Published var hasFullDiskAccess = PermissionChecker().hasFullDiskAccess()
     @Published var totalRecoveredBytes: Int64 = 0
 
@@ -351,7 +353,11 @@ final class PurgeStore: ObservableObject {
             deselectSkippedItems(report.skippedItems)
             reflectDeletionReportInScanState(report)
             clearAllSelections()
-            lastDeletionReport = report
+            if defaults.bool(forKey: Self.pendingOnboardingCelebrationKey) {
+                publishOnboardingCelebrationIfNeeded(freedBytes: freedBytes)
+            } else {
+                lastDeletionReport = report
+            }
             CleanupHistoryStore.shared.append(trigger: trigger, report: report)
         } catch {
             errorMessage = trigger == .scheduled
@@ -596,13 +602,22 @@ final class PurgeStore: ObservableObject {
     /// Immediate safe cleanup from the menu bar (no “unused days” wait; does not require scheduled cleaning to be enabled).
     @discardableResult
     func performManualSafeCleanNow(referenceDate now: Date = Date()) async -> ScheduledCleaningSummary {
-        await performSafeCleanup(
+        let summary = await performSafeCleanup(
             referenceDate: now,
             minUnusedDays: 0,
             historyTrigger: .manual,
             scheduledNotifications: false,
             clearSelectionsAfterCleanup: true
         )
+        publishOnboardingCelebrationIfNeeded(freedBytes: summary.freedBytes)
+        return summary
+    }
+
+    static let pendingOnboardingCelebrationKey = "onboarding.pendingCelebration"
+
+    private func publishOnboardingCelebrationIfNeeded(freedBytes: Int64) {
+        guard defaults.bool(forKey: Self.pendingOnboardingCelebrationKey) else { return }
+        onboardingCelebrationFreedBytes = freedBytes
     }
 
     private func performSafeCleanup(

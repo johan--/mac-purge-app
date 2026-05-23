@@ -20,7 +20,7 @@ struct PurgeApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            AppRootView()
                 .environmentObject(store)
                 .environmentObject(diskStore)
                 .onAppear {

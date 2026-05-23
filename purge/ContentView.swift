@@ -9,9 +9,9 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var store: PurgeStore
+    @EnvironmentObject private var diskStore: DiskSummaryStore
     @Environment(\.scenePhase) private var scenePhase
-    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
-    @State private var showOnboarding = false
+    @AppStorage("onboarding.pendingCelebration") private var pendingOnboardingCelebration = false
     private let isRunningPreview = ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
 
     var body: some View {
@@ -35,16 +35,8 @@ struct ContentView: View {
         }
         .task {
             guard !isRunningPreview else { return }
-            if !hasCompletedOnboarding {
-                showOnboarding = true
-                return
-            }
             guard store.hasFullDiskAccess, store.cacheItems.isEmpty, store.devTools.isEmpty, store.projectGroups.isEmpty else { return }
             await store.scanAll()
-        }
-        .onChange(of: hasCompletedOnboarding) { completed in
-            guard !isRunningPreview, !completed else { return }
-            showOnboarding = true
         }
         .onChange(of: scenePhase) { phase in
             guard phase == .active, !isRunningPreview else { return }
@@ -84,13 +76,14 @@ struct ContentView: View {
                 }
             )
         }
-        .sheet(isPresented: $showOnboarding) {
-            OnboardingView(
-                hasCompletedOnboarding: $hasCompletedOnboarding,
-                onComplete: completeOnboarding
-            )
-            .environmentObject(store)
-            .interactiveDismissDisabled(true)
+        .overlay {
+            if let freedBytes = store.onboardingCelebrationFreedBytes {
+                OnboardingCelebrationView(freedBytes: freedBytes) {
+                    completeOnboardingCelebration(freedBytes: freedBytes)
+                }
+                .transition(.opacity)
+                .zIndex(100)
+            }
         }
         .alert(
             "Missing reinstall instructions",
@@ -149,12 +142,11 @@ struct ContentView: View {
         .modifier(DiskSummaryRefreshModifier())
     }
 
-    private func completeOnboarding() {
-        hasCompletedOnboarding = true
-        showOnboarding = false
-
-        guard !isRunningPreview, store.hasFullDiskAccess else { return }
-        Task { await store.scanAll() }
+    private func completeOnboardingCelebration(freedBytes: Int64) {
+        _ = freedBytes
+        pendingOnboardingCelebration = false
+        store.onboardingCelebrationFreedBytes = nil
+        diskStore.refresh()
     }
 
     private var sidebar: some View {
