@@ -20,6 +20,13 @@ struct AppBrandMark: View {
     }
 }
 
+/// Sidebar column insets — brand mark and nav selection share the same leading edge.
+enum SidebarLayout {
+    static let horizontalInset: CGFloat = 8
+    static let navRowInnerPadding: CGFloat = 8
+    static let selectionCornerRadius: CGFloat = 6
+}
+
 /// Shared horizontal inset for Settings-style detail pages (App Caches, Dev Tools, Settings).
 enum AppDetailPageLayout {
     static let horizontalInset: CGFloat = 24
@@ -34,6 +41,16 @@ struct AppSectionPageHeader<Trailing: View>: View {
     let subtitle: String
     @ViewBuilder var trailing: () -> Trailing
 
+    init(
+        title: String,
+        subtitle: String,
+        @ViewBuilder trailing: @escaping () -> Trailing = { EmptyView() }
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.trailing = trailing
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: AppStyle.Spacing.medium) {
             VStack(alignment: .leading, spacing: 4) {
@@ -45,13 +62,26 @@ struct AppSectionPageHeader<Trailing: View>: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Spacer(minLength: AppStyle.Spacing.small)
+            Spacer(minLength: AppStyle.Spacing.medium)
 
             trailing()
         }
         .padding(.horizontal, AppDetailPageLayout.horizontalInset)
         .padding(.top, AppDetailPageLayout.topContentInset)
         .padding(.bottom, AppStyle.Spacing.small)
+    }
+}
+
+/// Scan and Clean Selected — top-trailing actions on App Caches / Dev Tools pages.
+struct AppScanCleanActions: View {
+    let onScan: () -> Void
+
+    var body: some View {
+        HStack(spacing: AppStyle.Spacing.xSmall) {
+            AppScanButton(action: onScan)
+            AppCleanSelectedButton()
+        }
+        .fixedSize()
     }
 }
 
@@ -251,9 +281,9 @@ struct AppNavRow: View {
                 Spacer(minLength: AppStyle.Spacing.xSmall)
             }
             .foregroundStyle(isSelected ? Color.primary : Color.secondary)
-            .padding(.horizontal, 10)
+            .padding(.horizontal, SidebarLayout.navRowInnerPadding)
             .padding(.vertical, 6)
-            .background(navBackground, in: RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous))
+            .background(navBackground, in: RoundedRectangle(cornerRadius: SidebarLayout.selectionCornerRadius, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -380,6 +410,34 @@ private struct FixedWindowWidthConfigurator: NSViewRepresentable {
             }
 
             clampFrameIfNeeded(window, width: width, minHeight: minHeight)
+            removeSidebarToggle(from: window)
+            disableSidebarCollapse(in: window)
+        }
+
+        override func layout() {
+            super.layout()
+            if let window {
+                removeSidebarToggle(from: window)
+            }
+        }
+
+        private func removeSidebarToggle(from window: NSWindow) {
+            guard let toolbar = window.toolbar else { return }
+            let toggleID = "com.apple.SwiftUI.navigationSplitView.toggleSidebar"
+            while let index = toolbar.items.firstIndex(where: { $0.itemIdentifier.rawValue == toggleID }) {
+                toolbar.removeItem(at: index)
+            }
+        }
+
+        private func disableSidebarCollapse(in window: NSWindow) {
+            guard let splitView = window.contentView?.firstDescendant(where: { $0 is NSSplitView }) as? NSSplitView,
+                  let controller = splitView.delegate as? NSSplitViewController else {
+                return
+            }
+            for item in controller.splitViewItems {
+                item.canCollapse = false
+                item.canCollapseFromWindowResize = false
+            }
         }
 
         private func clampFrameIfNeeded(_ window: NSWindow, width: CGFloat, minHeight: CGFloat) {
@@ -426,6 +484,28 @@ private struct DetailColumnToolbarCollapseModifier: ViewModifier {
     }
 }
 
+private struct SidebarToolbarModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 14.0, *) {
+            content.toolbar(removing: .sidebarToggle)
+        } else {
+            content
+        }
+    }
+}
+
+private extension NSView {
+    func firstDescendant(where predicate: (NSView) -> Bool) -> NSView? {
+        if predicate(self) { return self }
+        for subview in subviews {
+            if let match = subview.firstDescendant(where: predicate) {
+                return match
+            }
+        }
+        return nil
+    }
+}
+
 extension View {
     func fixedAppWindowWidth() -> some View {
         background(FixedWindowWidthConfigurator())
@@ -433,6 +513,10 @@ extension View {
 
     func detailColumnCompactTop() -> some View {
         modifier(DetailColumnCompactTopModifier())
+    }
+
+    func sidebarToolbarHidden() -> some View {
+        modifier(SidebarToolbarModifier())
     }
 }
 

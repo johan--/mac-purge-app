@@ -524,14 +524,8 @@ struct DevToolsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            AppSectionPageHeader(
-                title: "Dev Tools",
-                subtitle: pageSubtitle
-            ) {
-                HStack(spacing: AppStyle.Spacing.xSmall) {
-                    AppScanButton(action: onScan)
-                    AppCleanSelectedButton()
-                }
+            AppSectionPageHeader(title: "Dev Tools", subtitle: pageSubtitle) {
+                AppScanCleanActions(onScan: onScan)
             }
 
             FilterSortToolbar(

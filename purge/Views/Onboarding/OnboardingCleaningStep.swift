@@ -2,28 +2,26 @@ import SwiftUI
 
 struct OnboardingCleaningStep: View {
   @EnvironmentObject private var store: PurgeStore
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+  /// Items revealed during the first-scan step; falls back to live safe findings when empty.
+  let scanRevealedItems: [OnboardingScanFinding]
   let onFinished: (Int64) -> Void
 
   @State private var visibleItems: [OnboardingScanFinding] = []
   @State private var cleaningStarted = false
   @State private var initialItemCount = 0
 
-  private static let rowRemovalTransition: AnyTransition = .asymmetric(
-    insertion: .identity,
-    removal: .opacity.combined(with: .offset(x: 30))
-  )
-
   var body: some View {
-    VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
-      Text("Cleaning safe items…")
-        .font(.system(size: 28, weight: .bold, design: .rounded))
+    VStack(alignment: .center, spacing: AppStyle.Spacing.medium) {
+      OnboardingStepTitle(text: "Cleaning safe items…")
 
       OnboardingProgressBar(progress: cleaningProgress)
         .padding(.bottom, AppStyle.Spacing.xSmall)
+        .frame(maxWidth: .infinity)
 
-      ScrollView {
-        LazyVStack(spacing: 8) {
+      ScrollView(showsIndicators: false) {
+        VStack(spacing: 8) {
           ForEach(visibleItems) { item in
             ScanListRow(
               icon: .symbol("folder.fill"),
@@ -33,12 +31,13 @@ struct OnboardingCleaningStep: View {
               primaryBadgeText: "Cleared",
               primaryBadgeTone: .safe
             )
-            .transition(Self.rowRemovalTransition)
+            .transition(OnboardingTransitions.listRowRemoval(reduceMotion: reduceMotion))
           }
         }
+        .padding(.bottom, AppStyle.Spacing.xSmall)
+        .animation(.easeInOut(duration: 0.45), value: visibleItems.count)
       }
       .frame(maxHeight: 300)
-      .animation(.easeInOut(duration: 0.45), value: visibleItems.count)
 
       Spacer(minLength: 0)
     }
@@ -46,7 +45,7 @@ struct OnboardingCleaningStep: View {
     .onAppear {
       guard !cleaningStarted else { return }
       cleaningStarted = true
-      let items = Self.safeFindings(from: store)
+      let items = scanRevealedItems.isEmpty ? Self.safeFindings(from: store) : scanRevealedItems
       initialItemCount = items.count
       visibleItems = items
       Task { await runCleaning() }

@@ -39,11 +39,8 @@ enum AppStyle {
         static let metadataEmphasis = Font.system(size: 11, weight: .medium)
     }
 
-    /// Product cobalt — saturated enough for filled buttons with white labels.
-    static let accent = Color(
-        light: NSColor(calibratedRed: 21 / 255, green: 101 / 255, blue: 216 / 255, alpha: 1),
-        dark: NSColor(calibratedRed: 56 / 255, green: 136 / 255, blue: 244 / 255, alpha: 1)
-    )
+    /// Product blue (#0073E7) — saturated enough for filled buttons with white labels.
+    static let accent = Color(red: 0 / 255, green: 115 / 255, blue: 231 / 255)
     static let selectionFill = accent.opacity(0.07)
     static let selectionStroke = accent.opacity(0.18)
     static let canvas = Color(light: NSColor(calibratedWhite: 0.98, alpha: 1), dark: NSColor(calibratedWhite: 0.09, alpha: 1))

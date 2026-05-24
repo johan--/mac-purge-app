@@ -153,7 +153,6 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 AppBrandMark()
-                    .padding(.horizontal, 10)
                     .padding(.top, AppStyle.Spacing.medium)
                     .padding(.bottom, AppStyle.Spacing.large)
 
@@ -234,54 +233,54 @@ struct SidebarSummaryView: View {
     private enum SummaryFont {
         static let label = Font.system(size: 12, weight: .medium, design: .rounded)
         static let value = Font.system(size: 13, weight: .semibold, design: .rounded)
-        static let hint = Font.system(size: 12, weight: .regular, design: .rounded)
         static let diskCaption = Font.system(size: 11, weight: .medium, design: .rounded)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             Divider()
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
                 diskBar
 
                 stats
+                    .padding(.top, AppStyle.Spacing.small)
+                    .padding(.bottom, AppStyle.Spacing.small)
 
                 if store.safeRecoverableBytes > 0 {
                     cleanButton
                 }
             }
             .padding(.horizontal, AppStyle.Spacing.small)
-            .padding(.bottom, 14)
-            .padding(.top, 10)
+            .padding(.bottom, 10)
+            .padding(.top, 6)
         }
     }
 
     private var diskBar: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
             GeometryReader { geo in
+                let width = geo.size.width
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.primary.opacity(0.1))
+                        .fill(Color.primary.opacity(0.08))
                         .frame(height: 8)
 
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.primary.opacity(0.35))
-                        .frame(
-                            width: usedFraction * geo.size.width,
-                            height: 8
-                        )
+                        .fill(Color.primary.opacity(0.3))
+                        .frame(width: usedFraction * width, height: 8)
 
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.accentColor)
-                        .frame(
-                            width: recoverableFraction * geo.size.width,
-                            height: 8
-                        )
-                        .offset(x: max(0, (usedFraction - recoverableFraction) * geo.size.width))
+                    if safeRecoverableFraction > 0 {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(AppStyle.safe.opacity(0.5))
+                            .frame(width: safeRecoverableFraction * width, height: 8)
+                            .offset(x: max(0, (usedFraction - safeRecoverableFraction) * width))
+                    }
                 }
             }
             .frame(height: 8)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(diskBarAccessibilityLabel)
 
             HStack {
                 Text(formatBytes(diskStore.usedDiskBytes) + " used")
@@ -295,40 +294,25 @@ struct SidebarSummaryView: View {
         }
     }
 
-    private var stats: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if store.totalRecoverableBytes > 0 {
-                statRow(
-                    symbol: SafetyLevel.safe.symbolName(filled: true),
-                    label: SafetyLevel.safe.displayName,
-                    value: formatBytes(store.safeRecoverableBytes),
-                    color: AppStyle.safe,
-                    valueColor: .primary
-                )
-
-                statRow(
-                    symbol: SafetyLevel.medium.symbolName(filled: true),
-                    label: SafetyFilter.checkFirst.displayName,
-                    value: formatBytes(store.checkFirstRecoverableBytes),
-                    color: AppStyle.warning,
-                    valueColor: .secondary
-                )
-            } else {
-                HStack {
-                    Text("Run a scan to see recoverable space")
-                        .font(SummaryFont.hint)
-                        .foregroundStyle(.tertiary)
-                }
-            }
-
-            statRow(
-                symbol: PurgeSummarySymbol.freedSoFar(filled: true),
-                label: "Freed so far",
-                value: formatBytes(store.totalRecoveredBytes),
-                color: AppStyle.safe,
-                valueColor: AppStyle.safe
-            )
+    private var diskBarAccessibilityLabel: String {
+        var parts = [
+            "\(formatBytes(diskStore.usedDiskBytes)) used",
+            "\(formatBytes(diskStore.freeDiskBytes)) free",
+        ]
+        if store.safeRecoverableBytes > 0 {
+            parts.append("\(formatBytes(store.safeRecoverableBytes)) safe to clean shown on disk bar")
         }
+        return parts.joined(separator: ", ")
+    }
+
+    private var stats: some View {
+        statRow(
+            symbol: SafetyLevel.safe.symbolName(filled: true),
+            label: SafetyLevel.safe.displayName,
+            value: formatBytes(store.safeRecoverableBytes),
+            color: AppStyle.safe,
+            valueColor: store.safeRecoverableBytes > 0 ? .primary : .secondary
+        )
     }
 
     private func statRow(
@@ -376,11 +360,11 @@ struct SidebarSummaryView: View {
         return min(1.0, Double(diskStore.usedDiskBytes) / Double(diskStore.totalDiskBytes))
     }
 
-    private var recoverableFraction: Double {
+    private var safeRecoverableFraction: Double {
         guard diskStore.totalDiskBytes > 0 else { return 0 }
         return min(
             usedFraction,
-            Double(store.totalRecoverableBytes) / Double(diskStore.totalDiskBytes)
+            Double(store.safeRecoverableBytes) / Double(diskStore.totalDiskBytes)
         )
     }
 }

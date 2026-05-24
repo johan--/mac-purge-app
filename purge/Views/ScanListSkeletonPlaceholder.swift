@@ -243,6 +243,8 @@ struct ShimmerModifier: ViewModifier {
                         .offset(x: phase * geo.size.width * 2 - geo.size.width)
                     }
                     .allowsHitTesting(false)
+                    // Mask the gradient to the skeleton shapes, not the container bounds.
+                    .mask(content)
                 }
             }
             .onAppear {
@@ -251,6 +253,5 @@ struct ShimmerModifier: ViewModifier {
                     phase = 1
                 }
             }
-            .clipped()
     }
 }

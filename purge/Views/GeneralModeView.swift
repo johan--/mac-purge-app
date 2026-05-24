@@ -116,14 +116,8 @@ struct AppCachesView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            AppSectionPageHeader(
-                title: "App Caches",
-                subtitle: pageSubtitle
-            ) {
-                HStack(spacing: AppStyle.Spacing.xSmall) {
-                    AppScanButton(action: onScan)
-                    AppCleanSelectedButton()
-                }
+            AppSectionPageHeader(title: "App Caches", subtitle: pageSubtitle) {
+                AppScanCleanActions(onScan: onScan)
             }
 
             FilterSortToolbar(

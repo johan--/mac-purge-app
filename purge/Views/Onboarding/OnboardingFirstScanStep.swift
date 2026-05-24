@@ -14,14 +14,14 @@ struct OnboardingFirstScanStep: View {
   )
 
   var body: some View {
-    VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
-      Text("Running your first scan.")
-        .font(.system(size: 28, weight: .bold, design: .rounded))
+    VStack(alignment: .center, spacing: AppStyle.Spacing.medium) {
+      OnboardingStepTitle(text: "Running your first scan.")
 
       OnboardingProgressBar(progress: combinedProgress)
         .padding(.bottom, AppStyle.Spacing.xSmall)
+        .frame(maxWidth: .infinity)
 
-      ScrollView {
+      OnboardingFadingScrollView(maxHeight: 280) {
         LazyVStack(spacing: 8) {
           ForEach(revealController.revealedItems) { item in
             ScanListRow(
@@ -35,9 +35,9 @@ struct OnboardingFirstScanStep: View {
             .transition(Self.rowInsertionTransition)
           }
         }
+        .padding(.bottom, AppStyle.Spacing.xSmall)
+        .animation(.easeOut(duration: 0.45), value: revealController.revealedItems.count)
       }
-      .frame(maxHeight: 280)
-      .animation(.easeOut(duration: 0.45), value: revealController.revealedItems.count)
       .accessibilityLabel("Items found, \(revealController.revealedItems.count)")
 
       Spacer(minLength: 0)

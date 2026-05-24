@@ -2,6 +2,7 @@ import SwiftUI
 
 struct OnboardingFlowView: View {
   @Binding var hasCompletedOnboarding: Bool
+  @Binding var isExitingToHome: Bool
   @EnvironmentObject private var store: PurgeStore
   @EnvironmentObject private var diskStore: DiskSummaryStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -28,10 +29,15 @@ struct OnboardingFlowView: View {
         footer
           .padding(.horizontal, OnboardingLayout.horizontalPadding)
           .padding(.bottom, OnboardingLayout.verticalPadding)
-          .padding(.top, AppStyle.Spacing.medium)
+          .padding(.top, step == .results ? AppStyle.Spacing.xSmall : AppStyle.Spacing.medium)
       }
     }
   }
+  .onboardingExitBlur(isExiting: isExitingToHome, reduceMotion: reduceMotion)
+  .animation(
+    reduceMotion ? nil : .easeInOut(duration: OnboardingTransitions.dismissDuration),
+    value: isExitingToHome
+  )
   .frame(
     minWidth: AppWindowLayout.width,
     minHeight: AppWindowLayout.minHeight
@@ -70,7 +76,7 @@ struct OnboardingFlowView: View {
       case .results:
         OnboardingResultsStep()
       case .cleaning:
-        OnboardingCleaningStep { freedBytes in
+        OnboardingCleaningStep(scanRevealedItems: revealController.revealedItems) { freedBytes in
           celebrationFreedBytes = freedBytes
           advance(to: .celebration)
         }
@@ -99,7 +105,7 @@ struct OnboardingFlowView: View {
         ) {
           grantPermissions(andSkipOptional: false)
         }
-        OnboardingSecondaryButton(title: "Skip optional ones for now") {
+        OnboardingSecondaryButton(title: "Skip optional ones for now", style: .outlined) {
           grantPermissions(andSkipOptional: true)
         }
         if !store.hasFullDiskAccess {
@@ -114,10 +120,16 @@ struct OnboardingFlowView: View {
           advance(to: .firstScan)
         }
       case .results:
+        Text("Your documents, photos, and projects are never touched.")
+          .font(.subheadline)
+          .foregroundStyle(.secondary)
+          .multilineTextAlignment(.center)
+          .fixedSize(horizontal: false, vertical: true)
+          .padding(.bottom, AppStyle.Spacing.xxSmall)
         OnboardingPrimaryButton(title: cleanNowTitle) {
           advance(to: .cleaning)
         }
-        OnboardingSecondaryButton(title: "Review everything first") {
+        OnboardingSecondaryButton(title: "Review everything first", style: .outlined) {
           exitToReviewPath()
         }
       default:
@@ -154,6 +166,22 @@ struct OnboardingFlowView: View {
     pendingCelebration = true
     UserDefaults.standard.set(SafetyFilter.all.rawValue, forKey: "filter.appCaches")
     store.selectedTab = .appCaches
+
+    if reduceMotion {
+      completeExitToHome()
+      return
+    }
+
+    isExitingToHome = true
+    Task { @MainActor in
+      try? await Task.sleep(for: .seconds(OnboardingTransitions.dismissDuration))
+      guard isExitingToHome else { return }
+      completeExitToHome()
+    }
+  }
+
+  private func completeExitToHome() {
+    isExitingToHome = false
     hasCompletedOnboarding = true
     diskStore.refresh()
   }
@@ -176,7 +204,10 @@ struct OnboardingFlowView: View {
 }
 
 #Preview {
-  OnboardingFlowView(hasCompletedOnboarding: .constant(false))
-    .environmentObject(PurgeStore())
-    .environmentObject(DiskSummaryStore())
+  OnboardingFlowView(
+    hasCompletedOnboarding: .constant(false),
+    isExitingToHome: .constant(false)
+  )
+  .environmentObject(PurgeStore())
+  .environmentObject(DiskSummaryStore())
 }

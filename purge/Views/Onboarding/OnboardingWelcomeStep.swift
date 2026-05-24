@@ -4,8 +4,6 @@ import SwiftUI
 struct OnboardingWelcomeStep: View {
   var body: some View {
     VStack(spacing: AppStyle.Spacing.large) {
-      Spacer(minLength: 0)
-
       VStack(spacing: AppStyle.Spacing.medium) {
         Image(nsImage: NSApplication.shared.applicationIconImage)
           .resizable()
@@ -30,13 +28,14 @@ struct OnboardingWelcomeStep: View {
 
       HStack(spacing: AppStyle.Spacing.large) {
         OnboardingFeatureChip(symbol: "speaker.slash.fill", label: "Runs silently")
+          .onboardingBlurIn(index: 0)
         OnboardingFeatureChip(symbol: "bell.badge.fill", label: "Smart nudges")
+          .onboardingBlurIn(index: 1)
         OnboardingFeatureChip(symbol: "shield.checkered", label: "Always safe")
+          .onboardingBlurIn(index: 2)
       }
       .padding(.top, AppStyle.Spacing.small)
-
-      Spacer(minLength: 0)
     }
-    .frame(maxWidth: OnboardingLayout.contentMaxWidth)
+    .frame(maxWidth: OnboardingLayout.contentMaxWidth, maxHeight: .infinity)
   }
 }

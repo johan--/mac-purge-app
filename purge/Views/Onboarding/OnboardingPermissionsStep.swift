@@ -8,10 +8,8 @@ struct OnboardingPermissionsStep: View {
   @State private var loginItemRegistered = false
 
   var body: some View {
-    VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
-      Text("A couple of quick permissions.")
-        .font(.system(size: 28, weight: .bold, design: .rounded))
-        .frame(maxWidth: .infinity, alignment: .leading)
+    VStack(alignment: .center, spacing: AppStyle.Spacing.medium) {
+      OnboardingStepTitle(text: "A couple of quick permissions.")
 
       VStack(spacing: AppStyle.Spacing.small) {
         OnboardingPermissionRow(
@@ -22,6 +20,7 @@ struct OnboardingPermissionsStep: View {
           badgeTone: .accent,
           isGranted: store.hasFullDiskAccess
         )
+        .onboardingBlurIn(index: 0)
         OnboardingPermissionRow(
           symbol: "bell.fill",
           title: "Notifications",
@@ -30,6 +29,7 @@ struct OnboardingPermissionsStep: View {
           badgeTone: .neutral,
           isGranted: notificationsGranted
         )
+        .onboardingBlurIn(index: 1)
         OnboardingPermissionRow(
           symbol: "power",
           title: "Login item",
@@ -38,7 +38,9 @@ struct OnboardingPermissionsStep: View {
           badgeTone: .neutral,
           isGranted: loginItemRegistered
         )
+        .onboardingBlurIn(index: 2)
       }
+      .frame(maxWidth: .infinity)
 
       if !store.hasFullDiskAccess {
         Text("Full Disk Access is required before your first scan.")
