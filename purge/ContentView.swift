@@ -63,20 +63,6 @@ struct ContentView: View {
                 }
             )
         }
-        .sheet(item: $store.lastDeletionReport) { report in
-            DeletionSummarySheet(
-                report: report,
-                onDone: {
-                    store.lastDeletionReport = nil
-                },
-                onScanAgain: {
-                    store.lastDeletionReport = nil
-                    if !isRunningPreview {
-                        Task { await store.scanAll() }
-                    }
-                }
-            )
-        }
         .overlay {
             if let freedBytes = store.interactiveSafeCleanupFreedBytes {
                 SafeCleanupCelebrationOverlay(freedBytes: freedBytes) {
@@ -93,10 +79,22 @@ struct ContentView: View {
                 .transition(.opacity)
                 .zIndex(100)
             }
+
+            if let report = store.lastDeletionReport {
+                SafeCleanupCelebrationOverlay(freedBytes: deletionSummaryFreedBytes(for: report)) {
+                    completeDeletionSummary()
+                }
+                .transition(reduceMotion ? .opacity : .safeCleanupCelebrationBlur)
+                .zIndex(90)
+            }
         }
         .animation(
             reduceMotion ? nil : .easeInOut(duration: 0.35),
             value: store.interactiveSafeCleanupFreedBytes != nil
+        )
+        .animation(
+            reduceMotion ? nil : .easeInOut(duration: 0.35),
+            value: store.lastDeletionReport != nil
         )
         .alert(
             "Missing reinstall instructions",
@@ -164,6 +162,29 @@ struct ContentView: View {
 
         withAnimation(.easeInOut(duration: 0.35)) {
             store.dismissInteractiveSafeCleanupCelebration()
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            withAnimation(.easeInOut(duration: 0.6)) {
+                diskStore.refresh()
+            }
+        }
+    }
+
+    private func deletionSummaryFreedBytes(for report: DeletionReport) -> Int64 {
+        report.totalDeleted
+    }
+
+    private func completeDeletionSummary() {
+        if reduceMotion {
+            store.lastDeletionReport = nil
+            diskStore.refresh()
+            return
+        }
+
+        withAnimation(.easeInOut(duration: 0.35)) {
+            store.lastDeletionReport = nil
         }
 
         Task { @MainActor in

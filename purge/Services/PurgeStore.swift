@@ -86,7 +86,7 @@ final class PurgeStore: ObservableObject {
     @Published var deletionSheetCandidates: [DeletionCandidate]?
     @Published var pendingUnknownDeletion: UnknownDeletionPayload?
     @Published var lastDeletionReport: DeletionReport?
-    /// When set, `ContentView` shows the onboarding celebration overlay instead of `DeletionSummarySheet`.
+    /// When set, `ContentView` shows the onboarding celebration overlay instead of the standard deletion summary.
     @Published var onboardingCelebrationFreedBytes: Int64?
     @Published private(set) var interactiveSafeCleanupTargetPaths: Set<String> = []
     @Published private(set) var interactiveSafeCleanupRemovedPaths: Set<String> = []
@@ -449,7 +449,12 @@ final class PurgeStore: ObservableObject {
                 pathToDisplayName: pathToDisplayName,
                 pathToExpectedSizeBytes: pathToExpectedSizeBytes
             )
-            let freedBytes = report.actualFreedBytes > 0 ? report.actualFreedBytes : report.totalDeleted
+            let freedBytes: Int64
+            if trigger == .manual {
+                freedBytes = report.totalDeleted
+            } else {
+                freedBytes = report.actualFreedBytes > 0 ? report.actualFreedBytes : report.totalDeleted
+            }
             incrementRecoveredTotal(by: freedBytes)
             deselectSkippedItems(report.skippedItems)
             reflectDeletionReportInScanState(report)

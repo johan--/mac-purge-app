@@ -176,8 +176,8 @@ struct SafeCleanupCelebrationOverlay: View {
             VStack(spacing: AppStyle.Spacing.large) {
                 Spacer(minLength: 0)
 
-                AnimatedCompletionCheckmark(progress: checkmarkProgress, color: celebrationAccent)
-                    .frame(width: 104, height: 104)
+                CompletionCheckmarkBadge(progress: checkmarkProgress, color: celebrationAccent)
+                    .frame(width: 88, height: 88)
                     .accessibilityHidden(true)
 
                 VStack(spacing: AppStyle.Spacing.small) {
@@ -250,6 +250,21 @@ struct SafeCleanupCelebrationOverlay: View {
     }
 }
 
+private struct CompletionCheckmarkBadge: View {
+    let progress: CGFloat
+    let color: Color
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(color.opacity(0.92), lineWidth: 5)
+
+            AnimatedCompletionCheckmark(progress: progress, color: color)
+                .padding(22)
+        }
+    }
+}
+
 private struct AnimatedCompletionCheckmark: View {
     let progress: CGFloat
     let color: Color
@@ -259,7 +274,7 @@ private struct AnimatedCompletionCheckmark: View {
             .trim(from: 0, to: progress)
             .stroke(
                 color,
-                style: StrokeStyle(lineWidth: 10, lineCap: .round, lineJoin: .round)
+                style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round)
             )
     }
 }
