@@ -32,6 +32,11 @@ enum DeletionSafetyPolicy {
         "FamilyCircle"
     ]
 
+    /// Sandboxed app containers whose cache directories are guarded by macOS.
+    nonisolated static let protectedContainerBundleIDs: Set<String> = [
+        "com.apple.Safari"
+    ]
+
     /// Folder names allowed to be removed when located anywhere inside the user's home.
     nonisolated static let whitelistedFolderNames: Set<String> = [
         "node_modules",
@@ -159,13 +164,27 @@ enum DeletionSafetyPolicy {
         return protectedSystemCacheFolderNames.contains(topFolder)
     }
 
+    nonisolated static func isProtectedAppContainer(_ url: URL) -> Bool {
+        let standardized = url.standardizedFileURL
+        let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+        let containersPrefix = "\(home)/Library/Containers/"
+        let path = standardized.path
+        guard path.hasPrefix(containersPrefix) else { return false }
+
+        let relative = String(path.dropFirst(containersPrefix.count))
+        guard let bundleID = relative.split(separator: "/").first.map(String.init) else {
+            return false
+        }
+        return protectedContainerBundleIDs.contains(bundleID)
+    }
+
     nonisolated static func evaluate(_ url: URL) -> DeletionSafetyDecision {
         let standardized = url.standardizedFileURL
         let path = standardized.path
         let homeURL = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
         let home = homeURL.path
 
-        if isProtectedSystemCache(standardized) {
+        if isProtectedSystemCache(standardized) || isProtectedAppContainer(standardized) {
             return .blockedNeverDelete
         }
 

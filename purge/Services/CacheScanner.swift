@@ -173,6 +173,9 @@ final class CacheScanner {
         var items: [CacheItem] = []
         for key in keys {
             for bundleID in ExplanationDatabase.containerProbeBundleIDs(forKey: key) {
+                guard !DeletionSafetyPolicy.protectedContainerBundleIDs.contains(bundleID) else {
+                    continue
+                }
                 guard let containerURL = ExplanationDatabase.containerCacheURL(forBundleID: bundleID, home: home) else {
                     continue
                 }
