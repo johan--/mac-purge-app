@@ -73,6 +73,5 @@ struct PurgeCommands: Commands {
             .disabled(!store.hasFullDiskAccess)
         }
         CommandGroup(replacing: .undoRedo) {}
-        CommandGroup(replacing: .sidebar) {}
     }
 }

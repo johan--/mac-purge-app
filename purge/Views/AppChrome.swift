@@ -781,23 +781,7 @@ private struct FixedWindowWidthConfigurator: NSViewRepresentable {
             }
 
             clampFrameIfNeeded(window, width: width, minHeight: minHeight)
-            removeSidebarToggle(from: window)
             disableSidebarCollapse(in: window)
-        }
-
-        override func layout() {
-            super.layout()
-            if let window {
-                removeSidebarToggle(from: window)
-            }
-        }
-
-        private func removeSidebarToggle(from window: NSWindow) {
-            guard let toolbar = window.toolbar else { return }
-            let toggleID = "com.apple.SwiftUI.navigationSplitView.toggleSidebar"
-            while let index = toolbar.items.firstIndex(where: { $0.itemIdentifier.rawValue == toggleID }) {
-                toolbar.removeItem(at: index)
-            }
         }
 
         private func disableSidebarCollapse(in window: NSWindow) {
@@ -855,16 +839,6 @@ private struct DetailColumnToolbarCollapseModifier: ViewModifier {
     }
 }
 
-private struct SidebarToolbarModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(macOS 14.0, *) {
-            content.toolbar(removing: .sidebarToggle)
-        } else {
-            content
-        }
-    }
-}
-
 /// Pulls sidebar header + nav up under the unified toolbar (tighter than default safe area).
 private struct SidebarCompactTopModifier: ViewModifier {
     func body(content: Content) -> some View {
@@ -893,10 +867,6 @@ extension View {
 
     func detailColumnCompactTop() -> some View {
         modifier(DetailColumnCompactTopModifier())
-    }
-
-    func sidebarToolbarHidden() -> some View {
-        modifier(SidebarToolbarModifier())
     }
 
     func sidebarCompactTop() -> some View {

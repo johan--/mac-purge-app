@@ -13,10 +13,11 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("onboarding.pendingCelebration") private var pendingOnboardingCelebration = false
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
     private let isRunningPreview = ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             sidebar
         } detail: {
             Group {
@@ -33,6 +34,9 @@ struct ContentView: View {
                 }
             }
             .detailColumnCompactTop()
+        }
+        .onAppear {
+            columnVisibility = .all
         }
         .task {
             guard !isRunningPreview else { return }
