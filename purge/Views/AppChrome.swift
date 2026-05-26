@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import SwiftUI
 
 struct AppBrandMark: View {
@@ -710,6 +711,10 @@ private enum FixedWindowWidthStorage {
     static var delegateKey: UInt8 = 0
 }
 
+enum AppSidebarAnimation {
+    static let duration: TimeInterval = 0.28
+}
+
 /// Clamps live resize attempts; SwiftUI often overrides `minSize` / `maxSize` alone.
 private final class FixedWindowWidthDelegate: NSObject, NSWindowDelegate {
     let fixedWidth: CGFloat
@@ -781,18 +786,6 @@ private struct FixedWindowWidthConfigurator: NSViewRepresentable {
             }
 
             clampFrameIfNeeded(window, width: width, minHeight: minHeight)
-            disableSidebarCollapse(in: window)
-        }
-
-        private func disableSidebarCollapse(in window: NSWindow) {
-            guard let splitView = window.contentView?.firstDescendant(where: { $0 is NSSplitView }) as? NSSplitView,
-                  let controller = splitView.delegate as? NSSplitViewController else {
-                return
-            }
-            for item in controller.splitViewItems {
-                item.canCollapse = false
-                item.canCollapseFromWindowResize = false
-            }
         }
 
         private func clampFrameIfNeeded(_ window: NSWindow, width: CGFloat, minHeight: CGFloat) {
@@ -808,6 +801,134 @@ private struct FixedWindowWidthConfigurator: NSViewRepresentable {
                 frame.size.height = targetHeight
             }
             window.setFrame(frame, display: false)
+        }
+    }
+}
+
+private struct AnimatedSidebarCollapseConfigurator: NSViewRepresentable {
+    @Binding var columnVisibility: NavigationSplitViewVisibility
+    let reduceMotion: Bool
+
+    func makeCoordinator() -> AnimatedSidebarCollapseCoordinator {
+        AnimatedSidebarCollapseCoordinator()
+    }
+
+    func makeNSView(context: Context) -> ConfiguratorHostingView {
+        let view = ConfiguratorHostingView()
+        view.coordinator = context.coordinator
+        return view
+    }
+
+    func updateNSView(_ nsView: ConfiguratorHostingView, context: Context) {
+        context.coordinator.columnVisibility = $columnVisibility
+        context.coordinator.reduceMotion = reduceMotion
+        nsView.coordinator = context.coordinator
+        nsView.configureSidebarCollapse()
+    }
+
+    final class ConfiguratorHostingView: NSView {
+        weak var coordinator: AnimatedSidebarCollapseCoordinator?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            configureSidebarCollapse()
+        }
+
+        func configureSidebarCollapse() {
+            guard let window else { return }
+            coordinator?.configure(in: window)
+        }
+    }
+}
+
+private final class AnimatedSidebarCollapseCoordinator: NSResponder {
+    var columnVisibility: Binding<NavigationSplitViewVisibility>?
+    var reduceMotion = false
+
+    private weak var splitViewController: NSSplitViewController?
+    private var isTogglingSidebar = false
+
+    func configure(in window: NSWindow) {
+        guard let splitView = window.contentView?.firstDescendant(where: { $0 is NSSplitView }) as? NSSplitView,
+              let controller = splitView.delegate as? NSSplitViewController else {
+            return
+        }
+
+        splitViewController = controller
+        configureSidebarItem(in: controller)
+        installResponder(before: splitView)
+    }
+
+    @objc func toggleSidebar(_ sender: Any?) {
+        guard let sidebarItem else {
+            _ = nextResponder?.tryToPerform(#selector(toggleSidebar(_:)), with: sender)
+            return
+        }
+        guard !isTogglingSidebar else { return }
+
+        let shouldCollapse = !sidebarItem.isCollapsed
+        setSidebarCollapsed(shouldCollapse)
+    }
+
+    private var sidebarItem: NSSplitViewItem? {
+        splitViewController?.splitViewItems.first
+    }
+
+    private func configureSidebarItem(in controller: NSSplitViewController) {
+        guard let item = controller.splitViewItems.first else { return }
+
+        item.canCollapse = true
+        item.canCollapseFromWindowResize = false
+        item.collapseBehavior = .preferResizingSiblingsWithFixedSplitView
+    }
+
+    private func installResponder(before splitView: NSSplitView) {
+        guard splitView.nextResponder !== self else { return }
+
+        nextResponder = splitView.nextResponder
+        splitView.nextResponder = self
+    }
+
+    private func syncColumnVisibility(_ visibility: NavigationSplitViewVisibility) {
+        guard columnVisibility?.wrappedValue != visibility else { return }
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            columnVisibility?.wrappedValue = visibility
+        }
+    }
+
+    private func setSidebarCollapsed(_ isCollapsed: Bool) {
+        let targetVisibility: NavigationSplitViewVisibility = isCollapsed ? .detailOnly : .all
+        guard let sidebarItem else {
+            syncColumnVisibility(targetVisibility)
+            return
+        }
+        guard sidebarItem.isCollapsed != isCollapsed else {
+            syncColumnVisibility(targetVisibility)
+            return
+        }
+
+        if reduceMotion {
+            sidebarItem.isCollapsed = isCollapsed
+            splitViewController?.splitView.layoutSubtreeIfNeeded()
+            syncColumnVisibility(targetVisibility)
+            return
+        }
+
+        isTogglingSidebar = true
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = AppSidebarAnimation.duration
+            context.allowsImplicitAnimation = true
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+
+            sidebarItem.animator().isCollapsed = isCollapsed
+            splitViewController?.splitView.animator().layoutSubtreeIfNeeded()
+        } completionHandler: { [weak self] in
+            self?.syncColumnVisibility(targetVisibility)
+            self?.splitViewController?.splitView.layoutSubtreeIfNeeded()
+            self?.isTogglingSidebar = false
         }
     }
 }
@@ -863,6 +984,18 @@ private extension NSView {
 extension View {
     func fixedAppWindowWidth() -> some View {
         background(FixedWindowWidthConfigurator())
+    }
+
+    func animatedSidebarCollapse(
+        columnVisibility: Binding<NavigationSplitViewVisibility>,
+        reduceMotion: Bool
+    ) -> some View {
+        background(
+            AnimatedSidebarCollapseConfigurator(
+                columnVisibility: columnVisibility,
+                reduceMotion: reduceMotion
+            )
+        )
     }
 
     func detailColumnCompactTop() -> some View {

@@ -8,6 +8,11 @@ struct OnboardingResultsCategory: Identifiable {
   var id: String { title }
 }
 
+struct OnboardingResultsSnapshot {
+  let totalBytes: Int64
+  let categories: [OnboardingResultsCategory]
+}
+
 extension PurgeStore {
   var onboardingResultsCategories: [OnboardingResultsCategory] {
     var browserBytes: Int64 = 0
@@ -94,20 +99,29 @@ extension PurgeStore {
 
 struct OnboardingResultsStep: View {
   @EnvironmentObject private var store: PurgeStore
+  let snapshot: OnboardingResultsSnapshot?
+
+  init(snapshot: OnboardingResultsSnapshot? = nil) {
+    self.snapshot = snapshot
+  }
+
+  private var totalBytes: Int64 {
+    snapshot?.totalBytes ?? store.safeRecoverableBytes
+  }
 
   private var categories: [OnboardingResultsCategory] {
-    store.onboardingResultsCategories
+    snapshot?.categories ?? store.onboardingResultsCategories
   }
 
   var body: some View {
     VStack(alignment: .center, spacing: AppStyle.Spacing.large) {
       VStack(alignment: .center, spacing: 32) {
         VStack(alignment: .center, spacing: 0) {
-          Text(formatBytes(store.safeRecoverableBytes))
+          Text(formatBytes(totalBytes))
             .font(.system(size: 56, weight: .bold, design: .rounded))
             .monospacedDigit()
             .multilineTextAlignment(.center)
-            .accessibilityLabel("\(formatBytes(store.safeRecoverableBytes)) ready to clean")
+            .accessibilityLabel("\(formatBytes(totalBytes)) ready to clean")
 
           Text("ready to clean on your Mac")
             .font(.title2.weight(.medium))
@@ -115,7 +129,7 @@ struct OnboardingResultsStep: View {
             .multilineTextAlignment(.center)
         }
 
-        if let comparisonItems = OnboardingSizeComparison.items(for: store.safeRecoverableBytes) {
+        if let comparisonItems = OnboardingSizeComparison.items(for: totalBytes) {
           OnboardingSizeComparisonLine(items: comparisonItems)
         }
       }

@@ -8,6 +8,8 @@
 import SwiftUI
 
 struct ContentView: View {
+    var isLifecycleActive: Bool = true
+
     @EnvironmentObject private var store: PurgeStore
     @EnvironmentObject private var diskStore: DiskSummaryStore
     @Environment(\.scenePhase) private var scenePhase
@@ -39,15 +41,17 @@ struct ContentView: View {
             columnVisibility = .all
         }
         .task {
-            guard !isRunningPreview else { return }
-            guard store.hasFullDiskAccess, store.cacheItems.isEmpty, store.devTools.isEmpty, store.projectGroups.isEmpty else { return }
-            await store.scanAll()
+            await scanIfNeeded()
         }
         .onChange(of: scenePhase) { phase in
-            guard phase == .active, !isRunningPreview else { return }
+            guard isLifecycleActive, phase == .active, !isRunningPreview else { return }
             Task {
                 await ScheduledCleaningRegistrar.shared.runGracefulActivationSweepIfPastDue()
             }
+        }
+        .onChange(of: isLifecycleActive) { isActive in
+            guard isActive else { return }
+            Task { await scanIfNeeded() }
         }
         .sheet(isPresented: $store.showDeletionSheet) {
             DeletionConfirmSheet(
@@ -68,7 +72,7 @@ struct ContentView: View {
             )
         }
         .overlay {
-            if let freedBytes = store.interactiveSafeCleanupFreedBytes {
+            if isLifecycleActive, let freedBytes = store.interactiveSafeCleanupFreedBytes {
                 SafeCleanupCelebrationOverlay(freedBytes: freedBytes) {
                     completeInteractiveSafeCleanupCelebration()
                 }
@@ -76,7 +80,7 @@ struct ContentView: View {
                 .zIndex(90)
             }
 
-            if let freedBytes = store.onboardingCelebrationFreedBytes {
+            if isLifecycleActive, let freedBytes = store.onboardingCelebrationFreedBytes {
                 OnboardingCelebrationView(freedBytes: freedBytes) {
                     completeOnboardingCelebration(freedBytes: freedBytes)
                 }
@@ -84,7 +88,7 @@ struct ContentView: View {
                 .zIndex(100)
             }
 
-            if let report = store.lastDeletionReport {
+            if isLifecycleActive, let report = store.lastDeletionReport {
                 SafeCleanupCelebrationOverlay(freedBytes: deletionSummaryFreedBytes(for: report)) {
                     completeDeletionSummary()
                 }
@@ -153,8 +157,15 @@ struct ContentView: View {
         .frame(width: AppWindowLayout.width)
         .frame(minHeight: AppWindowLayout.minHeight)
         .fixedAppWindowWidth()
+        .animatedSidebarCollapse(columnVisibility: $columnVisibility, reduceMotion: reduceMotion)
         .tint(AppStyle.accent)
         .modifier(DiskSummaryRefreshModifier())
+    }
+
+    private func scanIfNeeded() async {
+        guard isLifecycleActive, !isRunningPreview else { return }
+        guard store.hasFullDiskAccess, store.cacheItems.isEmpty, store.devTools.isEmpty, store.projectGroups.isEmpty else { return }
+        await store.scanAll()
     }
 
     private func completeInteractiveSafeCleanupCelebration() {

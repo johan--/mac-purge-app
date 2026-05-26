@@ -12,6 +12,7 @@ struct OnboardingFlowView: View {
   @StateObject private var revealController = OnboardingScanRevealController()
   @State private var celebrationFreedBytes: Int64 = 0
   @State private var pinnedCleanupCandidates: [PurgeStore.DeletionCandidate] = []
+  @State private var resultsSnapshot: OnboardingResultsSnapshot?
   @State private var isResultsCleaning = false
 
   @AppStorage("onboarding.pendingCelebration") private var pendingCelebration = false
@@ -88,7 +89,7 @@ struct OnboardingFlowView: View {
           onScanComplete: { advance(to: .results) }
         )
       case .results:
-        OnboardingResultsStep()
+        OnboardingResultsStep(snapshot: resultsSnapshot)
       case .cleaning:
         OnboardingCleaningStep(pinnedCandidates: pinnedCleanupCandidates) { freedBytes in
           celebrationFreedBytes = freedBytes
@@ -153,7 +154,7 @@ struct OnboardingFlowView: View {
   }
 
   private var cleanNowTitle: String {
-    let bytes = store.safeRecoverableBytes
+    let bytes = resultsSnapshot?.totalBytes ?? store.safeRecoverableBytes
     if bytes > 0 {
       return "Clean \(formatBytes(bytes)) now"
     }
@@ -171,17 +172,7 @@ struct OnboardingFlowView: View {
     UserDefaults.standard.set(SafetyFilter.all.rawValue, forKey: "filter.appCaches")
     store.selectedTab = .appCaches
 
-    if reduceMotion {
-      completeExitToHome()
-      return
-    }
-
-    isExitingToHome = true
-    Task { @MainActor in
-      try? await Task.sleep(for: .seconds(OnboardingTransitions.dismissDuration))
-      guard isExitingToHome else { return }
-      completeExitToHome()
-    }
+    beginExitToHome()
   }
 
   private func startResultsCleanup() {
@@ -190,9 +181,14 @@ struct OnboardingFlowView: View {
     guard !candidates.isEmpty else { return }
 
     pinnedCleanupCandidates = candidates
+    resultsSnapshot = OnboardingResultsSnapshot(
+      totalBytes: candidates.reduce(Int64(0)) { $0 + $1.sizeBytes },
+      categories: store.onboardingResultsCategories
+    )
     isResultsCleaning = true
     guard store.beginInteractiveSafeCleanup(candidates: candidates, reduceMotion: reduceMotion) else {
       isResultsCleaning = false
+      resultsSnapshot = nil
       return
     }
 
@@ -202,6 +198,7 @@ struct OnboardingFlowView: View {
         store.completeInteractiveSafeCleanup(freedBytes: summary.freedBytes)
       } else {
         isResultsCleaning = false
+        resultsSnapshot = nil
         store.cancelInteractiveSafeCleanup()
       }
     }
@@ -209,34 +206,57 @@ struct OnboardingFlowView: View {
 
   private func completeResultsCleanupCelebration() {
     isResultsCleaning = false
-    pendingCelebration = false
 
     if reduceMotion {
       store.dismissInteractiveSafeCleanupCelebration()
-      finishOnboarding()
+      finishOnboardingImmediately()
       return
     }
 
-    withAnimation(.easeInOut(duration: 0.35)) {
-      store.dismissInteractiveSafeCleanupCelebration()
-    }
-
-    Task { @MainActor in
-      try? await Task.sleep(nanoseconds: 350_000_000)
-      finishOnboarding()
-    }
+    clearCleanupPresentationState()
+    isExitingToHome = true
+    completeExitToHomeAfterDismissal()
   }
 
   private func completeExitToHome() {
-    isExitingToHome = false
+    store.dismissInteractiveSafeCleanupCelebration()
     hasCompletedOnboarding = true
+    isExitingToHome = false
     diskStore.refresh()
   }
 
   private func finishOnboarding() {
+    clearCleanupPresentationState()
+    beginExitToHome()
+  }
+
+  private func finishOnboardingImmediately() {
+    clearCleanupPresentationState()
+    completeExitToHome()
+  }
+
+  private func beginExitToHome() {
+    if reduceMotion {
+      completeExitToHome()
+      return
+    }
+
+    isExitingToHome = true
+    completeExitToHomeAfterDismissal()
+  }
+
+  private func completeExitToHomeAfterDismissal() {
+    Task { @MainActor in
+      try? await Task.sleep(for: .seconds(OnboardingTransitions.dismissDuration))
+      guard isExitingToHome else { return }
+      completeExitToHome()
+    }
+  }
+
+  private func clearCleanupPresentationState() {
     pendingCelebration = false
-    hasCompletedOnboarding = true
-    diskStore.refresh()
+    store.onboardingCelebrationFreedBytes = nil
+    store.lastDeletionReport = nil
   }
 
   private func advance(to next: OnboardingStep) {
