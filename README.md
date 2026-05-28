@@ -2,7 +2,7 @@
 
 **Free up your Mac. Safely.**
 
-Purge scans your Mac for cache files and junk left behind by apps and development tools. Every item gets a plain-English explanation, a safety label, and recovery guidance before you delete anything. One-click cleanup only touches items marked **Safe to Clean**.
+Purge scans your Mac for cache files and junk left behind by apps and development tools. Every item gets a plain-English explanation and a safety label before you delete anything. One-click cleanup only touches items marked **Safe to Clean**.
 
 ![Purge demo](screenshots/Purge-Demo.gif)
 
@@ -17,7 +17,7 @@ Scans `~/Library/Caches`, sandbox container caches, and common system junk:
 - Per-app cache folders with friendly names, brand icons, and plain-English explanations
 - **System Junk** — iPhone backups, application logs, crash reports, macOS installers, font cache
 - Duplicate cache locations for the same app merged into a single row
-- Results stream in as they are found — no frozen scan screen
+- Results stream in as they are found
 
 ### Dev Tools
 
@@ -27,35 +27,36 @@ Three sections in one view:
 - **iOS Simulators** — unused simulator runtimes grouped together (booted simulators are skipped)
 - **Developer projects** — `node_modules`, Python virtual environments, Rust `target`, Flutter build output, Xcode `Pods`, Android `.gradle`, and other artifacts grouped by project
 
-Control which projects appear with **Consider stale after** in Settings (1 month to 2 years, or Show all).
+In **Settings → Dev Tools**, choose **Consider stale after** (1 month to 2 years, or Show all) to control which project folders appear.
 
 ### Safety labels
 
-Every item is tagged before you delete anything:
+Purge uses two labels you will see in the app:
 
 | Label | Meaning |
 |-------|---------|
 | **Safe to Clean** | Known cache or rebuildable artifact — safe to remove |
 | **Check First** | May be safe, but could cause inconvenience |
-| **Do Not Delete** | Passwords, credentials, or critical data — leave it alone |
-| **Not Sure** | Could not be identified — Purge will not auto-clean these |
 
-Filter chips: **All**, **Safe to Clean**, and **Check First** (the last includes both Check First and Do Not Delete items). Sort by size, date modified, or name.
+Filter with **All**, **Safe to Clean**, or **Check First**. Sort by size, date modified, or name.
 
-Right-click any row to **Recategorize**, **Reset to automatic**, or delete with extra confirmation.
+Unidentified folders are left out of the list entirely — Purge only shows what it knows about.
+
+Row badges call out extra context when relevant: **Can be rebuilt**, **Check support files**, **Local changes nearby**, and **Manual category** (when you override an item yourself). Right-click any row to recategorize or reset to automatic.
 
 ### Cleaning
 
-- **Clean Safe Items** — one-click cleanup from the sidebar or menu bar; only Safe to Clean items, with git and lockfile checks
+- **Clean Safe Items** — one-click cleanup from the sidebar; only Safe to Clean items, with git and lockfile checks
 - **Clean Selected** — pick specific rows, review in a confirmation sheet, then delete
-- **Scheduled cleaning** — enable in Settings; choose frequency (weekly, monthly, or every 3 months) and how long app caches must sit untouched (30 days to 12 months). Purge sends a local reminder and cleans safe items when you open the app
+- **Clean Safe Files Now** — same safe cleanup from the menu bar
+- **Scheduled cleaning** — in **Settings → Cleaning Schedule**, enable **Run automatic cleaning**, choose **How often** (weekly, monthly, or every 3 months) and **Untouched for** (30 days to 12 months). Purge sends a local reminder and cleans safe items when you open the app
 
 ### More
 
-- **First-run onboarding** — walks through permissions, preferences, your first scan, and a safe clean
-- **Menu bar companion** — recoverable space at a glance, quick open, and **Clean Safe Files Now**
-- **Manual categories** — your overrides are saved locally and always take priority over automatic identification
-- **Git and lockfile checks** — warns before deleting near uncommitted changes or missing reinstall files
+- **First-run onboarding** — permissions, auto-clean preference, first scan, and a safe clean walkthrough
+- **Menu bar companion** — recoverable space at a glance, quick open, and safe cleanup
+- **Disk summary** — sidebar shows used/free space and how much is safe to recover
+- **Scan All** — rescans App Caches and Dev Tools together (⇧⌘R)
 
 ---
 
@@ -108,10 +109,10 @@ Purge needs Full Disk Access to scan your cache folders.
 Purge uses a local, hand-curated database — no cloud AI, no file contents uploaded. Resolution order:
 
 1. **Your manual overrides** — any category you set yourself always wins
-2. **Legacy local cache** — previously identified folders from older versions (`ai_cache.json`)
-3. **Bundled database** — a curated `explanations.json` ships with the app
-4. **Safety tier list** — pattern-based rules for common folder names
-5. **Not Sure** — anything that does not match; Purge never auto-cleans these
+2. **Bundled database** — a curated `explanations.json` ships with the app
+3. **Safety tier list** — pattern-based rules for common folder names
+
+Anything that does not match is not shown in the list.
 
 ---
 
@@ -127,7 +128,7 @@ Purge uses a local, hand-curated database — no cloud AI, no file contents uplo
 
 Purge runs entirely on your Mac. Scans, explanations, manual overrides, and cleanup history stay in local Application Support — nothing is uploaded.
 
-Purge never reads or sends file contents. There is no telemetry or analytics in the current release.
+Purge never reads or sends file contents.
 
 ---
 
