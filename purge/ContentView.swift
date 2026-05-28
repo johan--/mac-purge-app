@@ -560,15 +560,12 @@ struct SidebarSummaryView: View {
                     RoundedRectangle(cornerRadius: 4)
                         .fill(Color.primary.opacity(0.3))
                         .frame(width: usedFraction * width, height: 8)
-                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.6), value: diskStore.usedDiskBytes)
 
                     if safeRecoverableFraction > 0 {
                         RoundedRectangle(cornerRadius: 4)
                             .fill(AppStyle.safe.opacity(0.5))
                             .frame(width: safeRecoverableFraction * width, height: 8)
                             .offset(x: max(0, (usedFraction - safeRecoverableFraction) * width))
-                            .animation(reduceMotion ? nil : .easeInOut(duration: 0.6), value: store.safeRecoverableBytes)
-                            .animation(reduceMotion ? nil : .easeInOut(duration: 0.6), value: diskStore.usedDiskBytes)
                     }
                 }
             }

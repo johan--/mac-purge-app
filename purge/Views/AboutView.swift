@@ -7,9 +7,6 @@ struct AboutView: View {
     /// When true, the parent owns scrolling and the macOS 26 progressive scroll-edge blur.
     var usesExternalScrollContainer = false
 
-    @State private var easterEggTapTimes: [Date] = []
-    @State private var showEasterEgg = false
-
     var body: some View {
         Group {
             if usesExternalScrollContainer {
@@ -29,12 +26,6 @@ struct AboutView: View {
         }
         .frame(maxWidth: .infinity, alignment: .top)
         .background(AppStyle.canvas)
-        .overlay {
-            if showEasterEgg {
-                AboutEasterEggOverlay(onDismiss: dismissEasterEgg)
-                    .transition(.opacity)
-            }
-        }
     }
 
     private var aboutScrollContent: some View {
@@ -65,7 +56,6 @@ struct AboutView: View {
                 .frame(width: 64, height: 64)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .contentShape(Rectangle())
-                .onTapGesture(perform: registerAboutEasterEggTap)
 
             Text("Purge")
                 .font(.system(size: 30, weight: .semibold, design: .rounded))
@@ -237,26 +227,6 @@ struct AboutView: View {
             }
     }
 
-    private func registerAboutEasterEggTap() {
-        let now = Date()
-        if let last = easterEggTapTimes.last, now.timeIntervalSince(last) > 2 {
-            easterEggTapTimes = [now]
-        } else {
-            easterEggTapTimes.append(now)
-        }
-        guard easterEggTapTimes.count >= 5 else { return }
-        easterEggTapTimes.removeAll()
-        withAnimation(.easeOut(duration: 0.25)) {
-            showEasterEgg = true
-        }
-    }
-
-    private func dismissEasterEgg() {
-        withAnimation(.easeOut(duration: 0.2)) {
-            showEasterEgg = false
-        }
-    }
-
     private var appVersion: String {
         let info = Bundle.main.infoDictionary
         let version = info?["CFBundleShortVersionString"] as? String
@@ -332,66 +302,5 @@ private struct AboutActionRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-    }
-}
-
-private struct AboutEasterEggOverlay: View {
-    let onDismiss: () -> Void
-    @State private var appeared = false
-
-    var body: some View {
-        ZStack {
-            Color.black.opacity(0.48)
-                .ignoresSafeArea()
-                .opacity(appeared ? 1 : 0)
-
-            VStack(alignment: .center, spacing: 0) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Oh, you found this.")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    Text("Cool.")
-                        .foregroundStyle(.secondary)
-
-                    Text("No seriously, cool.")
-                        .foregroundStyle(.secondary)
-
-                    Text("We spent like 10 minutes on it.")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                Spacer(minLength: 14)
-
-                HStack {
-                    Spacer()
-                    Button("Ok fine thanks", action: onDismiss)
-                        .buttonStyle(.borderedProminent)
-                    Spacer()
-                }
-            }
-            .padding(20)
-            .frame(width: 320, height: 220)
-            .fixedSize(horizontal: true, vertical: true)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(red: 0.12, green: 0.13, blue: 0.15))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
-            )
-            .environment(\.colorScheme, .dark)
-            .scaleEffect(appeared ? 1.0 : 0.95)
-            .opacity(appeared ? 1.0 : 0.0)
-        }
-        .onAppear {
-            withAnimation(.easeOut(duration: 0.28)) {
-                appeared = true
-            }
-        }
     }
 }
