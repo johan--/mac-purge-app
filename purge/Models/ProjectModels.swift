@@ -67,7 +67,7 @@ enum DeletableArtifactKind: String, Hashable, Sendable {
         switch self {
         case .nodeModules: return "node_modules"
         case .venv: return "venv"
-        case .dotGradle: return "gradle"
+        case .dotGradle: return "gradle-cache"
         case .target: return "target"
         case .pods: return "Pods"
         case .dartTool: return "dart-tool"

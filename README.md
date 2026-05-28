@@ -4,7 +4,9 @@
 
 Purge scans your Mac for cache files and junk left behind by apps and development tools. It explains everything in plain English, tells you what is safe to delete, and never touches anything it is not sure about.
 
-![Purge App Screenshot](screenshots/app.png)
+<video src="screenshots/Purge-Demo.mp4" controls autoplay muted loop poster="screenshots/app.png" width="100%">
+  Your browser does not support the video tag. <a href="screenshots/Purge-Demo.mp4">Download the demo</a>.
+</video>
 
 ---
 

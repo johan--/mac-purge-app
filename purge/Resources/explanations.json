@@ -806,7 +806,7 @@
     "key": "node-modules",
     "display_name": "Node.js Packages",
     "tag": "safe",
-    "explanation": "Code libraries installed for developer projects on your Mac. Purge only shows these for projects that have not been opened in over 6 months, so it is safe to remove them. If you ever need them back, just run npm install in your project folder.",
+    "explanation": "Code libraries installed for developer projects. Safe to remove for stale projects \u2014 run npm install to restore them anytime.",
     "bundle_ids": [],
     "aliases": [
       "node_modules"
@@ -887,7 +887,7 @@
     "key": "archives",
     "display_name": "App Archives",
     "tag": "medium",
-    "explanation": "This folder may contain archived builds or backups created by development tools. Deleting it is usually safe but check the contents first if you are a developer, as it may contain important project archives.",
+    "explanation": "Archived builds created by development tools. Check contents before deleting \u2014 may contain important project archives.",
     "bundle_ids": [],
     "aliases": [
       "Archives"
@@ -951,7 +951,7 @@
     "display_name": "Xcode Build Files",
     "tag": "safe",
     "aliases": ["DerivedData", "deriveddata"],
-    "explanation": "Temporary files Xcode creates while building apps. Always safe to delete. Your next build will just take a little longer as Xcode rebuilds them. Actual space freed may be slightly less than shown due to how Xcode stores build files internally.",
+    "explanation": "Temporary files Xcode creates while building apps. Always safe to delete \u2014 your next build will just take a little longer.",
     "scope": "dev_tools"
   },
   {
@@ -1251,7 +1251,7 @@
     "key": "vagrant",
     "display_name": "Vagrant Box Cache",
     "tag": "medium",
-    "explanation": "Downloaded virtual machine images used by Vagrant. Safe to delete if you are not actively using them but re-downloading can take a long time.",
+    "explanation": "Virtual machine images used by Vagrant. Safe to delete if unused \u2014 re-downloading takes a while.",
     "bundle_ids": [],
     "aliases": [
       "vagrant",
@@ -1288,7 +1288,7 @@
     "key": "iphone-backups",
     "display_name": "iPhone Backups",
     "tag": "danger",
-    "explanation": "Full backups of your iPhone or iPad. Deleting these means you cannot restore your device from this Mac. Only delete if you have iCloud backup enabled or no longer need these devices.",
+    "explanation": "Full iPhone and iPad backups. Cannot be recovered once deleted \u2014 only remove if iCloud Backup is enabled.",
     "bundle_ids": [
       "com.apple.MobileSync"
     ],
@@ -1533,7 +1533,7 @@
     "key": "android-build",
     "display_name": "Android Build Output",
     "tag": "medium",
-    "explanation": "Compiled Android app files. Safe to delete but your Android project will need a full rebuild next time, which can take several minutes.",
+    "explanation": "Compiled Android app files. Safe to delete \u2014 your project will rebuild automatically next time.",
     "bundle_ids": [],
     "aliases": [
       "build/intermediates",
@@ -1587,7 +1587,7 @@
     "key": "rust-target",
     "display_name": "Rust Build Output",
     "tag": "medium",
-    "explanation": "Compiled Rust project files. Safe to delete but your project will need a full recompile next time, which can take a few minutes for large projects.",
+    "explanation": "Compiled Rust project files. Safe to delete \u2014 your project will recompile automatically on the next build.",
     "bundle_ids": [],
     "aliases": [
       "target",
@@ -1626,7 +1626,7 @@
     "key": "xcode-archives",
     "display_name": "Xcode App Archives",
     "tag": "medium",
-    "explanation": "Archived builds of your apps created by Xcode, usually for App Store submission. Safe to delete if you no longer need to re-submit those specific builds, but they cannot be recovered once deleted.",
+    "explanation": "Archived Xcode builds for App Store submission. Cannot be recovered once deleted \u2014 only remove if you no longer need them.",
     "bundle_ids": [],
     "aliases": [
       "Archives",
@@ -1638,7 +1638,7 @@
     "key": "xcode-device-support",
     "display_name": "Xcode iOS Device Support",
     "tag": "medium",
-    "explanation": "Files that Xcode downloads to support debugging on specific iPhone and iPad models. Safe to delete for older device versions you no longer use, but Xcode will re-download them if needed.",
+    "explanation": "Files Xcode downloads to support debugging on specific devices. Safe to delete \u2014 Xcode will re-download them if needed.",
     "bundle_ids": [],
     "aliases": [
       "iOS DeviceSupport",
@@ -1666,7 +1666,7 @@
     "key": "nvm-cache",
     "display_name": "nvm Node.js Versions",
     "tag": "medium",
-    "explanation": "Multiple versions of Node.js managed by nvm. Safe to delete versions you are not using, but your projects may break if you remove the version they depend on.",
+    "explanation": "Node.js versions managed by nvm. Safe to delete unused versions \u2014 avoid removing versions your projects depend on.",
     "bundle_ids": [],
     "aliases": [
       ".nvm",

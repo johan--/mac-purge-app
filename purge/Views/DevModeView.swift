@@ -797,6 +797,8 @@ struct DevToolsView<PageHeader: View>: View {
         .background(AppStyle.canvas)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: store.interactiveSafeCleanupRemovedPaths)
         .animation(rowInsertionAnimation, value: developerTotalRowCount)
+        .animation(expandCollapseAnimation, value: iosSimulatorsExpanded)
+        .animation(expandCollapseAnimation, value: expandedProjectRoots)
     }
 
     private var rowInsertionAnimation: Animation? {
@@ -810,6 +812,14 @@ struct DevToolsView<PageHeader: View>: View {
                 insertion: .scanRowInsertion,
                 removal: cleaningRowRemovalTransition
             )
+    }
+
+    private var expandCollapseAnimation: Animation? {
+        reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.86, blendDuration: 0.08)
+    }
+
+    private var expandCollapseTransition: AnyTransition {
+        .opacity
     }
 
     private var cleaningRowRemovalTransition: AnyTransition {
@@ -852,17 +862,19 @@ struct DevToolsView<PageHeader: View>: View {
             : formatBytes(simulatorSectionByteTotal())
         return HStack(alignment: .center, spacing: 6) {
             Button {
-                withAnimation(.spring(duration: 0.2)) {
+                withAnimation(expandCollapseAnimation) {
                     iosSimulatorsExpanded.toggle()
                 }
             } label: {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 12, height: 44, alignment: .center)
-                    .contentShape(Rectangle())
-                    .rotationEffect(.degrees(iosSimulatorsExpanded ? 90 : 0))
-                    .animation(.spring(duration: 0.2), value: iosSimulatorsExpanded)
+                ZStack {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(width: 12, height: 12)
+                .rotationEffect(.degrees(iosSimulatorsExpanded ? 180 : 0), anchor: .center)
+                .frame(width: 12, height: 44, alignment: .center)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(iosSimulatorsExpanded ? "Collapse iOS Simulators" : "Expand iOS Simulators")
@@ -959,12 +971,15 @@ struct DevToolsView<PageHeader: View>: View {
                             .font(AppStyle.Typography.rowTitle)
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
-                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 12)
-                            .padding(.trailing, AppStyle.Spacing.xSmall)
-                            .accessibilityHidden(true)
+                        ZStack {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(width: 12, height: 12)
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0), anchor: .center)
+                        .padding(.trailing, AppStyle.Spacing.xSmall)
+                        .accessibilityHidden(true)
                     }
                     .contentShape(Rectangle())
                 }
@@ -977,6 +992,7 @@ struct DevToolsView<PageHeader: View>: View {
 
             if isExpanded {
                 projectArtifactRows(groupIndex: currentGroupIndex)
+                    .transition(expandCollapseTransition)
             }
         }
         .devToolsGroupCardChrome()
@@ -1045,10 +1061,12 @@ struct DevToolsView<PageHeader: View>: View {
     }
 
     private func toggleProjectExpanded(_ groupID: String) {
-        if expandedProjectRoots.contains(groupID) {
-            expandedProjectRoots.remove(groupID)
-        } else {
-            expandedProjectRoots.insert(groupID)
+        withAnimation(expandCollapseAnimation) {
+            if expandedProjectRoots.contains(groupID) {
+                expandedProjectRoots.remove(groupID)
+            } else {
+                expandedProjectRoots.insert(groupID)
+            }
         }
     }
 

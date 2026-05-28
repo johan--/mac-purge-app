@@ -202,7 +202,7 @@ struct ScanResultRow: View {
                 .lineLimit(1)
 
             Text(safetyInfo.explanation)
-                .lineLimit(2)
+                .lineLimit(3)
                 .truncationMode(.tail)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)

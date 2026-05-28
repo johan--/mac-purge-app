@@ -918,6 +918,8 @@ final class DevScanner {
                 return true
             case "build":
                 return true
+            case "android", "ios":
+                return true
             default:
                 return false
             }
