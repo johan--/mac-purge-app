@@ -1083,10 +1083,15 @@ final class DevScanner {
                         return built
                     }
 
-                    let staleDays = ScheduledCleaningUnusedDaysOption.currentDeveloperArtifactStaleDays()
+                    let staleDays = DevToolsStalenessOption.currentThresholdDays()
                     let now = Date()
-                    let staleArtifacts = sized.filter {
-                        Self.daysBetween($0.lastModified, now) >= staleDays
+                    let staleArtifacts: [ProjectCacheArtifact]
+                    if staleDays == DevToolsStalenessOption.showAll.rawValue {
+                        staleArtifacts = sized
+                    } else {
+                        staleArtifacts = sized.filter {
+                            Self.daysBetween($0.lastModified, now) >= staleDays
+                        }
                     }
 
                     guard !staleArtifacts.isEmpty else { return nil }

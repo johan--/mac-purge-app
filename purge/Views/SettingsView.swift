@@ -5,6 +5,8 @@ struct SettingsView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var prefs = ScheduledCleaningPreferenceStore.shared
     @ObservedObject private var history = CleanupHistoryStore.shared
+    @AppStorage(DevToolsStalenessOption.userDefaultsKey)
+    private var devToolsStalenessThresholdRaw = DevToolsStalenessOption.defaultOption.rawValue
     var showsPageHeader = true
     // @AppStorage("telemetry.lastSentDate") private var telemetryLastSentTimestamp = 0.0
 
@@ -23,7 +25,10 @@ struct SettingsView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                cleaningScheduleSection
+                VStack(alignment: .leading, spacing: 18) {
+                    cleaningScheduleSection
+                    devToolsSection
+                }
 
                 // Divider()
                 // telemetrySection
@@ -36,6 +41,9 @@ struct SettingsView: View {
         .padding(.bottom, AppDetailPageLayout.verticalPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(AppStyle.canvas)
+        .onChange(of: devToolsStalenessThresholdRaw) { _ in
+            Task { await store.scanAll() }
+        }
         // .sheet(isPresented: $showTelemetryPreviewSheet) {
         //     TelemetryPreviewSheet(
         //         payload: TelemetryService.makePayload(from: store),
@@ -167,67 +175,93 @@ struct SettingsView: View {
     */
 
     private var cleaningScheduleSection: some View {
-        settingsSectionCard {
-            VStack(alignment: .leading, spacing: 12) {
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .center) {
-                        Text("Cleaning Schedule")
-                            .font(.headline)
+        VStack(alignment: .leading, spacing: 10) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center) {
+                    Text("Cleaning Schedule")
+                        .font(.headline)
 
-                        Spacer(minLength: 12)
+                    Spacer(minLength: 12)
 
-                        Toggle("Run automatic cleaning", isOn: autoCleanEnabledBinding)
+                    Toggle("Run automatic cleaning", isOn: autoCleanEnabledBinding)
                         .toggleStyle(.switch)
-                    }
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Cleaning Schedule")
-                            .font(.headline)
-
-                        Toggle("Run automatic cleaning", isOn: autoCleanEnabledBinding)
-                        .toggleStyle(.switch)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                Text(scheduleSummary)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(scheduleTextTransition)
-                    .animation(scheduleTextAnimation, value: scheduleSummary)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Cleaning Schedule")
+                        .font(.headline)
+
+                    Toggle("Run automatic cleaning", isOn: autoCleanEnabledBinding)
+                        .toggleStyle(.switch)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(16)
 
-            settingsSectionDivider
+            settingsSectionCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(scheduleSummary)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(scheduleTextTransition)
+                        .animation(scheduleTextAnimation, value: scheduleSummary)
+                }
+                .padding(16)
 
-            VStack(spacing: 8) {
-                settingPickerRow(title: "How often") {
-                    Picker("How often", selection: $prefs.frequency) {
-                        ForEach(ScheduledCleaningFrequency.allCases, id: \.self) { frequency in
-                            Text(frequency.displayName).tag(frequency)
+                settingsSectionDivider
+
+                VStack(spacing: 8) {
+                    settingPickerRow(title: "How often") {
+                        Picker("How often", selection: $prefs.frequency) {
+                            ForEach(ScheduledCleaningFrequency.allCases, id: \.self) { frequency in
+                                Text(frequency.displayName).tag(frequency)
+                            }
+                        }
+                    }
+
+                    settingPickerRow(title: "Untouched for") {
+                        Picker("Untouched for", selection: $prefs.unusedDays) {
+                            ForEach(ScheduledCleaningUnusedDaysOption.allCases, id: \.self) { option in
+                                Text(option.label).tag(option)
+                            }
                         }
                     }
                 }
+                .padding(16)
+                .disabled(!prefs.isEnabled)
 
-                settingPickerRow(title: "Untouched for") {
-                    Picker("Untouched for", selection: $prefs.unusedDays) {
-                        ForEach(ScheduledCleaningUnusedDaysOption.allCases, id: \.self) { option in
-                            Text(option.label).tag(option)
-                        }
+                settingsSectionDivider
+
+                TimelineView(.periodic(from: Date(), by: 60)) { context in
+                    ScheduleStatusAnimatedHeight(
+                        reduceMotion: reduceMotion,
+                        animation: scheduleLayoutAnimation
+                    ) {
+                        cleaningScheduleStatusCard(referenceDate: context.date)
                     }
+                    .padding(16)
                 }
             }
-            .padding(16)
-            .disabled(!prefs.isEnabled)
+        }
+    }
 
-            settingsSectionDivider
+    private var devToolsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Dev Tools")
+                .font(.headline)
 
-            TimelineView(.periodic(from: Date(), by: 60)) { context in
-                ScheduleStatusAnimatedHeight(
-                    reduceMotion: reduceMotion,
-                    animation: scheduleLayoutAnimation
-                ) {
-                    cleaningScheduleStatusCard(referenceDate: context.date)
+            settingsSectionCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    settingPickerRow(title: "Consider stale after") {
+                        Picker("Consider stale after", selection: devToolsStalenessSelectionBinding) {
+                            ForEach(DevToolsStalenessOption.allCases, id: \.self) { option in
+                                Text(option.label).tag(option)
+                            }
+                        }
+                    }
+
+                    Text(currentDevToolsStalenessOption.description)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(16)
             }
@@ -499,6 +533,21 @@ struct SettingsView: View {
     }
 
     private var settingsHorizontalContentInset: CGFloat { AppDetailPageLayout.horizontalInset }
+
+    private var currentDevToolsStalenessOption: DevToolsStalenessOption {
+        DevToolsStalenessOption(rawValue: devToolsStalenessThresholdRaw) ?? .defaultOption
+    }
+
+    private var devToolsStalenessSelectionBinding: Binding<DevToolsStalenessOption> {
+        Binding(
+            get: {
+                DevToolsStalenessOption(rawValue: devToolsStalenessThresholdRaw) ?? .defaultOption
+            },
+            set: { newValue in
+                devToolsStalenessThresholdRaw = newValue.rawValue
+            }
+        )
+    }
 
     private var settingsSectionDivider: some View {
         InsetCardDivider()

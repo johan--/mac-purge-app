@@ -786,6 +786,7 @@ struct DevToolsView<PageHeader: View>: View {
                     Text(projectSectionHeading)
                         .font(AppStyle.Typography.metadataEmphasis)
                         .foregroundStyle(.secondary)
+                        .padding(.horizontal, AppStyle.Spacing.small)
                 }
             }
 
@@ -897,8 +898,7 @@ struct DevToolsView<PageHeader: View>: View {
         .padding(.vertical, 2)
         .padding(.horizontal, AppStyle.Spacing.xSmall)
         .frame(minHeight: AppStyle.Row.parentHeight)
-        .background(AppStyle.elevated.opacity(0.5))
-        .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous))
+        .devToolsGroupCardChrome()
         .accessibilityElement(children: .combine)
         .accessibilityLabel("iOS Simulators")
     }
@@ -979,8 +979,7 @@ struct DevToolsView<PageHeader: View>: View {
                 projectArtifactRows(groupIndex: currentGroupIndex)
             }
         }
-        .background(AppStyle.elevated.opacity(0.5))
-        .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous))
+        .devToolsGroupCardChrome()
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Project \(group.displayName)")
         .accessibilityHint("Grouped dev tool cleanup targets")
@@ -1146,6 +1145,20 @@ struct DevToolsView<PageHeader: View>: View {
             return "Project"
         }
         return "Project, \(types)"
+    }
+}
+
+private extension View {
+    func devToolsGroupCardChrome() -> some View {
+        self
+            .background(
+                AppStyle.elevated,
+                in: RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
+                    .stroke(AppStyle.hairline, lineWidth: 0.5)
+            }
     }
 }
 
