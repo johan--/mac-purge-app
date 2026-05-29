@@ -55,7 +55,13 @@ final class DevScanner {
         "Vagrant Cache": "vagrant",
         "Zsh Cache": "zsh",
         "Electron App Caches": "electron",
-        "Playwright Browsers": "ms-playwright"
+        "Playwright Browsers": "ms-playwright",
+        "npm npx Cache": "npm-npx-cache",
+        "npm Logs": "npm-logs",
+        "Xcode Documentation Cache": "xcode-docs-cache",
+        "Corepack Cache": "corepack-cache",
+        "Obsolete Cursor Extension": "obsolete-cursor-extension",
+        "Obsolete VS Code Extension": "obsolete-vscode-extension"
     ]
 
     private func safetyInfo(forToolLabel toolLabel: String, primaryPath: URL?) -> SafetyInfo {
@@ -545,9 +551,15 @@ final class DevScanner {
             ("Xcode Archives", [home.appendingPathComponent("Library/Developer/Xcode/Archives", isDirectory: true)]),
             ("Xcode iOS DeviceSupport", [home.appendingPathComponent("Library/Developer/Xcode/iOS DeviceSupport", isDirectory: true)]),
             ("Xcode Caches", [home.appendingPathComponent("Library/Caches/com.apple.dt.Xcode", isDirectory: true)]),
+            ("Xcode Documentation Cache", [
+                home.appendingPathComponent("Library/Developer/Xcode/DocumentationCache", isDirectory: true)
+            ]),
             ("CocoaPods", [home.appendingPathComponent(".cocoapods/repos", isDirectory: true)]),
             ("Homebrew Cache", [home.appendingPathComponent("Library/Caches/Homebrew", isDirectory: true)]),
             ("npm Cache", [home.appendingPathComponent(".npm/_cacache", isDirectory: true)]),
+            ("npm npx Cache", [home.appendingPathComponent(".npm/_npx", isDirectory: true)]),
+            ("npm Logs", [home.appendingPathComponent(".npm/_logs", isDirectory: true)]),
+            ("Corepack Cache", [home.appendingPathComponent(".cache/node/corepack", isDirectory: true)]),
             ("pnpm Store", [home.appendingPathComponent(".pnpm-store", isDirectory: true)]),
             ("Yarn Cache", [home.appendingPathComponent("Library/Caches/Yarn", isDirectory: true)]),
             ("Gradle Cache", [home.appendingPathComponent(".gradle/caches", isDirectory: true)]),
@@ -643,7 +655,10 @@ final class DevScanner {
     }
 
     private func scanGlobalCachePlaceholders() -> ([DevTool], [DevToolSizeJob]) {
-        let built = globalCacheDefinitions().compactMap { entry -> DevTool? in
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let staticDefinitions = globalCacheDefinitions() + discoverObsoleteEditorExtensionDefinitions(home: home)
+
+        let built = staticDefinitions.compactMap { entry -> DevTool? in
             let label = entry.label
             let paths = entry.paths
             let existing = paths.filter {
@@ -677,8 +692,78 @@ final class DevScanner {
         return (tools, jobs)
     }
 
+    private func discoverObsoleteEditorExtensionDefinitions(home: URL) -> [(label: String, paths: [URL])] {
+        let cursor = obsoleteExtensionPaths(
+            in: home.appendingPathComponent(".cursor/extensions", isDirectory: true),
+            label: "Obsolete Cursor Extension"
+        )
+        let vscode = obsoleteExtensionPaths(
+            in: home.appendingPathComponent(".vscode/extensions", isDirectory: true),
+            label: "Obsolete VS Code Extension"
+        )
+        return cursor + vscode
+    }
+
+    private func obsoleteExtensionPaths(in extensionsRoot: URL, label: String) -> [(label: String, paths: [URL])] {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(
+            at: extensionsRoot,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+
+        var grouped: [String: [(version: String, url: URL)]] = [:]
+        for entry in entries {
+            guard (try? entry.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
+            let folderName = entry.lastPathComponent
+            if let parsed = Self.parseExtensionFolderName(folderName) {
+                grouped[parsed.base, default: []].append((parsed.version, entry.standardizedFileURL))
+            } else {
+                grouped[folderName, default: []].append(("0", entry.standardizedFileURL))
+            }
+        }
+
+        var results: [(label: String, paths: [URL])] = []
+        for (_, versions) in grouped {
+            guard versions.count > 1 else { continue }
+            let sorted = versions.sorted { Self.compareExtensionVersions($0.version, $1.version) == .orderedDescending }
+            for obsolete in sorted.dropFirst() {
+                let folderName = obsolete.url.lastPathComponent
+                results.append(("\(label): \(folderName)", [obsolete.url]))
+            }
+        }
+        return results
+    }
+
+    nonisolated static func parseExtensionFolderName(_ folderName: String) -> (base: String, version: String)? {
+        let pattern = #"^(.+)-(\d+\.\d+\.\d+(?:[-.][A-Za-z0-9]+)*)$"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: folderName, range: NSRange(folderName.startIndex..., in: folderName)),
+              match.numberOfRanges == 3,
+              let baseRange = Range(match.range(at: 1), in: folderName),
+              let versionRange = Range(match.range(at: 2), in: folderName) else {
+            return nil
+        }
+        return (String(folderName[baseRange]), String(folderName[versionRange]))
+    }
+
+    nonisolated static func compareExtensionVersions(_ lhs: String, _ rhs: String) -> ComparisonResult {
+        let left = lhs.split(separator: "-").first.map(String.init) ?? lhs
+        let right = rhs.split(separator: "-").first.map(String.init) ?? rhs
+        let leftParts = left.split(separator: ".").compactMap { Int($0) }
+        let rightParts = right.split(separator: ".").compactMap { Int($0) }
+        let maxCount = max(leftParts.count, rightParts.count)
+        for index in 0..<maxCount {
+            let l = index < leftParts.count ? leftParts[index] : 0
+            let r = index < rightParts.count ? rightParts[index] : 0
+            if l != r { return l < r ? .orderedAscending : .orderedDescending }
+        }
+        return .orderedSame
+    }
+
     private func scanGlobalCaches() -> [DevTool] {
-        let mapped = globalCacheDefinitions()
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let mapped = globalCacheDefinitions() + discoverObsoleteEditorExtensionDefinitions(home: home)
 
         let built = mapped.map { entry -> DevTool in
             let label = entry.label

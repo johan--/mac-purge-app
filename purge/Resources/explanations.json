@@ -2574,5 +2574,82 @@
       "ScreenTime"
     ],
     "scope": "app_caches"
+  },
+  {
+    "key": "npm-npx-cache",
+    "display_name": "npm npx Cache",
+    "tag": "safe",
+    "explanation": "Temporary packages downloaded when you run npx. Safe to delete; npx will download them again when needed.",
+    "bundle_ids": [],
+    "aliases": [
+      "npm-npx-cache",
+      "_npx"
+    ],
+    "scope": "dev_tools"
+  },
+  {
+    "key": "npm-logs",
+    "display_name": "npm Logs",
+    "tag": "safe",
+    "explanation": "Log files written by npm commands. Safe to delete with no effect on installed packages.",
+    "bundle_ids": [],
+    "aliases": [
+      "npm-logs",
+      "_logs"
+    ],
+    "scope": "dev_tools"
+  },
+  {
+    "key": "xcode-docs-cache",
+    "display_name": "Xcode Documentation Cache",
+    "tag": "safe",
+    "explanation": "Cached Apple developer documentation used by Xcode. Safe to delete; Xcode will re-download docs when you browse them again.",
+    "bundle_ids": [],
+    "aliases": [
+      "xcode-docs-cache",
+      "DocumentationCache"
+    ],
+    "scope": "dev_tools"
+  },
+  {
+    "key": "corepack-cache",
+    "display_name": "Corepack Cache",
+    "tag": "safe",
+    "explanation": "Cached Node.js package manager shims managed by Corepack. Safe to delete; Corepack will restore them on the next use.",
+    "bundle_ids": [],
+    "aliases": [
+      "corepack-cache",
+      "corepack"
+    ],
+    "scope": "dev_tools"
+  },
+  {
+    "key": "obsolete-cursor-extension",
+    "display_name": "Obsolete Cursor Extension",
+    "tag": "safe",
+    "explanation": "An older version of a Cursor extension superseded by a newer install. Safe to delete.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools"
+  },
+  {
+    "key": "obsolete-vscode-extension",
+    "display_name": "Obsolete VS Code Extension",
+    "tag": "safe",
+    "explanation": "An older version of a VS Code extension superseded by a newer install. Safe to delete.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools"
+  },
+  {
+    "key": "stale-browser-framework",
+    "display_name": "Old Browser Framework",
+    "tag": "medium",
+    "explanation": "A previous Chromium framework version bundled inside a browser app. Usually safe to remove, but reinstall the browser if it fails to launch.",
+    "bundle_ids": [],
+    "aliases": [
+      "stale-browser-framework"
+    ],
+    "scope": "app_caches"
   }
 ]

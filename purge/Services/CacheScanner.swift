@@ -65,7 +65,7 @@ final class CacheScanner {
         let cachesURL = home.appendingPathComponent("Library/Caches", isDirectory: true)
         var sizeJobs: [SizeJob] = []
         var collectedPaths = Set<String>()
-        var keysNeedingContainers = Set<String>()
+        let hasFullDiskAccess = PermissionChecker().hasFullDiskAccess()
 
         continuation.yield(.status("Scanning App Caches..."))
         let contents: [URL]
@@ -92,17 +92,35 @@ final class CacheScanner {
             ) else { continue }
             continuation.yield(.found(item))
             sizeJobs.append(SizeJob(path: directory.standardizedFileURL))
-            if let key = item.definitionKey {
-                keysNeedingContainers.insert(key)
+        }
+
+        if hasFullDiskAccess {
+            continuation.yield(.status("Scanning Application Support caches..."))
+            let appSupportItems = applicationSupportCacheItems(home: home, collectedPaths: &collectedPaths)
+            for item in appSupportItems {
+                if Task.isCancelled {
+                    continuation.finish()
+                    return
+                }
+                continuation.yield(.found(item))
+                sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
+            }
+
+            continuation.yield(.status("Scanning sandboxed app caches..."))
+            let containerItems = allContainerCacheItems(home: home, collectedPaths: &collectedPaths)
+            for item in containerItems {
+                if Task.isCancelled {
+                    continuation.finish()
+                    return
+                }
+                continuation.yield(.found(item))
+                sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
             }
         }
 
-        let containerItems = containerCacheItems(
-            home: home,
-            keys: keysNeedingContainers,
-            collectedPaths: &collectedPaths
-        )
-        for item in containerItems {
+        continuation.yield(.status("Scanning browser app bundles..."))
+        let staleFrameworkItems = staleChromiumFrameworkItems(collectedPaths: &collectedPaths)
+        for item in staleFrameworkItems {
             if Task.isCancelled {
                 continuation.finish()
                 return
@@ -188,48 +206,151 @@ final class CacheScanner {
         }
     }
 
-    private func containerCacheItems(
+    private func applicationSupportCacheItems(
         home: URL,
-        keys: Set<String>,
         collectedPaths: inout Set<String>
     ) -> [CacheItem] {
+        let appSupportRoot = home.appendingPathComponent("Library/Application Support", isDirectory: true)
+        guard let appDirs = try? FileManager.default.contentsOfDirectory(
+            at: appSupportRoot,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+
         var items: [CacheItem] = []
-        for key in keys {
-            for bundleID in ExplanationDatabase.containerProbeBundleIDs(forKey: key) {
-                guard !DeletionSafetyPolicy.protectedContainerBundleIDs.contains(bundleID) else {
-                    continue
-                }
-                guard let containerURL = containerCacheURL(forBundleID: bundleID, home: home) else {
-                    continue
-                }
-                let pathKey = containerURL.standardizedFileURL.path
-                guard !collectedPaths.contains(pathKey) else { continue }
-                collectedPaths.insert(pathKey)
+        for appDir in appDirs {
+            guard (try? appDir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
+                continue
+            }
+            let appFolderName = appDir.lastPathComponent
+            guard !CacheDiscoveryPaths.excludedApplicationSupportRoots.contains(appFolderName) else {
+                continue
+            }
 
-                let modified = FolderSizing.contentModificationDate(at: containerURL)
-                let fallbackAppName = appNameFromBundleID(bundleID) ?? bundleID
-                let safetyInfo = ExplanationResolver.initialSafetyForCacheFolder(
-                    folderName: bundleID,
-                    friendlyHeadline: fallbackAppName,
-                    path: containerURL
-                )
-
-                items.append(
-                    CacheItem(
-                        definitionKey: key,
-                        location: CacheLocation(
-                            path: containerURL,
-                            sizeBytes: 0,
-                            lastModified: modified,
-                            folderName: bundleID
-                        ),
-                        appName: safetyInfo.headline,
-                        safetyInfo: safetyInfo
-                    )
-                )
+            for cacheURL in CacheDiscoveryPaths.applicationSupportCacheURLs(in: appDir) {
+                guard let item = cacheItemAtDiscoveredPath(
+                    cacheURL,
+                    headline: applicationSupportHeadline(appFolderName: appFolderName, cacheURL: cacheURL),
+                    folderName: appFolderName,
+                    collectedPaths: &collectedPaths
+                ) else { continue }
+                items.append(item)
             }
         }
         return items
+    }
+
+    private func allContainerCacheItems(
+        home: URL,
+        collectedPaths: inout Set<String>
+    ) -> [CacheItem] {
+        var items: [CacheItem] = []
+        for cacheURL in CacheDiscoveryPaths.containerCacheURLs(home: home) {
+            let bundleID = containerBundleID(from: cacheURL) ?? cacheURL.lastPathComponent
+            let headline = appNameFromBundleID(bundleID) ?? bundleID
+            guard let item = cacheItemAtDiscoveredPath(
+                cacheURL,
+                headline: "\(headline) Cache",
+                folderName: bundleID,
+                collectedPaths: &collectedPaths
+            ) else { continue }
+            items.append(item)
+        }
+        return items
+    }
+
+    private func staleChromiumFrameworkItems(collectedPaths: inout Set<String>) -> [CacheItem] {
+        var items: [CacheItem] = []
+        for frameworkVersionURL in CacheDiscoveryPaths.staleChromiumFrameworkVersionURLs() {
+            let appName = frameworkVersionURL
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .lastPathComponent
+                .replacingOccurrences(of: ".app", with: "")
+            let version = frameworkVersionURL.lastPathComponent
+            let headline = "\(appName) Old Version \(version)"
+            let pathKey = frameworkVersionURL.standardizedFileURL.path
+            guard !collectedPaths.contains(pathKey) else { continue }
+            collectedPaths.insert(pathKey)
+
+            let safety = SafetyInfo(
+                level: .medium,
+                headline: headline,
+                explanation: "An older Chromium framework bundled inside \(appName). Removing it frees space; the app should keep using the current version.",
+                recoverySteps: "Reinstall \(appName) from the vendor if the app fails to launch after cleanup.",
+                reinstallCommand: nil
+            )
+            items.append(
+                CacheItem(
+                    definitionKey: nil,
+                    location: CacheLocation(
+                        path: frameworkVersionURL,
+                        sizeBytes: 0,
+                        lastModified: FolderSizing.contentModificationDate(at: frameworkVersionURL),
+                        folderName: "stale-browser-framework"
+                    ),
+                    appName: headline,
+                    safetyInfo: safety
+                )
+            )
+        }
+        return items
+    }
+
+    private func cacheItemAtDiscoveredPath(
+        _ url: URL,
+        headline: String,
+        folderName: String,
+        collectedPaths: inout Set<String>
+    ) -> CacheItem? {
+        let pathKey = url.standardizedFileURL.path
+        guard !collectedPaths.contains(pathKey) else { return nil }
+        collectedPaths.insert(pathKey)
+
+        let modified = FolderSizing.contentModificationDate(at: url)
+        let safetyInfo = ExplanationResolver.initialSafetyForCacheFolder(
+            folderName: folderName,
+            friendlyHeadline: headline,
+            path: url
+        )
+        return CacheItem(
+            definitionKey: ExplanationDatabase.definitionKey(forFolderName: folderName),
+            location: CacheLocation(
+                path: url,
+                sizeBytes: 0,
+                lastModified: modified,
+                folderName: folderName
+            ),
+            appName: safetyInfo.headline,
+            safetyInfo: safetyInfo
+        )
+    }
+
+    private func applicationSupportHeadline(appFolderName: String, cacheURL: URL) -> String {
+        let cacheLeaf = cacheURL.lastPathComponent
+        let displayApp = appFolderName
+            .replacingOccurrences(of: "company.thebrowser.", with: "")
+            .replacingOccurrences(of: "com.google.", with: "")
+            .replacingOccurrences(of: "com.apple.", with: "")
+        if cacheLeaf == "Cache" || cacheLeaf == "CachedData" {
+            return "\(displayApp) Cache"
+        }
+        if cacheURL.path.contains("Service Worker/CacheStorage") {
+            return "\(displayApp) Service Worker Cache"
+        }
+        if cacheURL.path.contains("Service Worker/ScriptCache") {
+            return "\(displayApp) Service Worker Script Cache"
+        }
+        return "\(displayApp) \(cacheLeaf)"
+    }
+
+    private func containerBundleID(from cacheURL: URL) -> String? {
+        let components = cacheURL.standardizedFileURL.pathComponents
+        guard let containersIndex = components.firstIndex(of: "Containers"),
+              containersIndex + 1 < components.count else { return nil }
+        return components[containersIndex + 1]
     }
 
     private func runSizeJobs(
@@ -302,13 +423,6 @@ final class CacheScanner {
                 home.appendingPathComponent("Library/Caches/com.apple.ATS", isDirectory: true)
             )
         ]
-    }
-
-    private func containerCacheURL(forBundleID bundleID: String, home: URL) -> URL? {
-        let url = home
-            .appendingPathComponent("Library/Containers/\(bundleID)/Data/Library/Caches", isDirectory: true)
-        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-        return url
     }
 
     private static func itemsByApplyingSize(

@@ -94,7 +94,11 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/Caches",
             "\(home)/Library/Developer/Xcode/DerivedData",
             "\(home)/Library/Developer/Xcode/iOS DeviceSupport",
+            "\(home)/Library/Developer/Xcode/DocumentationCache",
             "\(home)/.npm",
+            "\(home)/.npm/_npx",
+            "\(home)/.npm/_logs",
+            "\(home)/.cache/node/corepack",
             "\(home)/.yarn/cache",
             "\(home)/.pnpm-store",
             "\(home)/.gradle/caches",
@@ -180,6 +184,69 @@ enum DeletionSafetyPolicy {
         return protectedContainerBundleIDs.contains(bundleID)
     }
 
+    nonisolated static func isWhitelistedApplicationSupportCachePath(_ path: String, home: String) -> Bool {
+        let prefix = "\(home)/Library/Application Support/"
+        guard path.hasPrefix(prefix) else { return false }
+
+        let relative = String(path.dropFirst(prefix.count))
+        guard !relative.isEmpty else { return false }
+
+        let topFolder = relative.split(separator: "/").first.map(String.init) ?? ""
+        if topFolder.isEmpty || topFolder == relative { return false }
+
+        if relative.hasSuffix("/Crashpad/completed") { return true }
+
+        let lastComponent = relative.split(separator: "/").last.map(String.init) ?? ""
+        if CacheDiscoveryPaths.applicationSupportDirectCacheNames.contains(lastComponent) {
+            return true
+        }
+
+        if relative.contains("/Service Worker/CacheStorage") { return true }
+        if relative.contains("/Service Worker/ScriptCache") { return true }
+
+        if relative.contains("/User Data/"),
+           CacheDiscoveryPaths.chromiumProfileCacheNames.contains(lastComponent) {
+            return true
+        }
+
+        return false
+    }
+
+    nonisolated static func isWhitelistedContainerCachePath(_ path: String, home: String) -> Bool {
+        let containersPrefix = "\(home)/Library/Containers/"
+        guard path.hasPrefix(containersPrefix) else { return false }
+        guard path.contains("/Data/Library/Caches") else { return false }
+
+        let relative = String(path.dropFirst(containersPrefix.count))
+        let parts = relative.split(separator: "/").map(String.init)
+        guard parts.count >= 4,
+              parts[1] == "Data",
+              parts[2] == "Library",
+              parts[3] == "Caches" else { return false }
+        if protectedContainerBundleIDs.contains(parts[0]) { return false }
+        return true
+    }
+
+    nonisolated static func isWhitelistedStaleBrowserFrameworkPath(_ path: String) -> Bool {
+        guard path.hasPrefix("/Applications/"), path.contains(".app/Contents/Frameworks/") else {
+            return false
+        }
+        guard path.contains("/Versions/") else { return false }
+        let last = URL(fileURLWithPath: path).lastPathComponent
+        return last != "Current" && last != "Versions"
+    }
+
+    nonisolated static func isWhitelistedEditorExtensionPath(_ path: String, home: String) -> Bool {
+        let prefixes = [
+            "\(home)/.cursor/extensions/",
+            "\(home)/.vscode/extensions/"
+        ]
+        guard let matched = prefixes.first(where: { path.hasPrefix($0) }) else { return false }
+        let relative = String(path.dropFirst(matched.count))
+        guard !relative.isEmpty, !relative.contains("/") else { return false }
+        return true
+    }
+
     nonisolated static func evaluate(_ url: URL) -> DeletionSafetyDecision {
         let standardized = url.standardizedFileURL
         let path = standardized.path
@@ -194,6 +261,19 @@ enum DeletionSafetyPolicy {
             if path == allowed || path.hasPrefix(allowed + "/") {
                 return .allow
             }
+        }
+
+        if isWhitelistedApplicationSupportCachePath(path, home: home) {
+            return .allow
+        }
+        if isWhitelistedContainerCachePath(path, home: home) {
+            return .allow
+        }
+        if isWhitelistedStaleBrowserFrameworkPath(path) {
+            return .allow
+        }
+        if isWhitelistedEditorExtensionPath(path, home: home) {
+            return .allow
         }
 
         for blocked in neverDeletePrefixes(home: home) {

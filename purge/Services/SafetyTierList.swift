@@ -21,6 +21,18 @@ enum SafetyTierList {
         "venv",
         ".venv",
         "_cacache",
+        "_npx",
+        "_logs",
+        "GPUCache",
+        "ShaderCache",
+        "CachedData",
+        "Code Cache",
+        "DawnWebGPUCache",
+        "component_crx_cache",
+        "CacheStorage",
+        "ScriptCache",
+        "DocumentationCache",
+        "corepack",
         "Homebrew",
         "yarn",
         "pnpm",
@@ -86,12 +98,41 @@ enum SafetyTierList {
         "com.apple.TCC"
     ]
 
-    nonisolated static func evaluate(folderName: String) -> SafetyLevel? {
+    nonisolated static func evaluate(folderName: String, path: URL? = nil) -> SafetyLevel? {
         let lower = folderName.lowercased()
+
+        if let path {
+            let pathLower = path.standardizedFileURL.path.lowercased()
+            if pathLower.contains("/service worker/cachestorage")
+                || pathLower.contains("/service worker/scriptcache")
+                || pathLower.contains("/gpucache")
+                || pathLower.contains("/shadercache")
+                || pathLower.contains("/code cache")
+                || pathLower.contains("/cacheddata")
+                || pathLower.contains("/component_crx_cache")
+                || pathLower.contains("/crashpad/completed") {
+                return .safe
+            }
+            if pathLower.contains(".app/contents/frameworks/") && pathLower.contains("/versions/") {
+                return .medium
+            }
+            if pathLower.contains("/.cursor/extensions/")
+                || pathLower.contains("/.vscode/extensions/") {
+                return .safe
+            }
+        }
 
         // Check do not delete first
         if doNotDelete.contains(where: { lower == $0.lowercased() }) {
             return .danger
+        }
+
+        if lower.contains("obsolete") && lower.contains("extension") {
+            return .safe
+        }
+
+        if lower == "stale-browser-framework" {
+            return .medium
         }
 
         // Check definitely safe folder names

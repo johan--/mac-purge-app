@@ -26,7 +26,7 @@ enum ExplanationResolver {
         if let record = ExplanationDatabase.matchBundledDatabase(folderName: folderName) {
             return ExplanationDatabase.safetyInfo(from: record)
         }
-        if let tierLevel = SafetyTierList.evaluate(folderName: folderName) {
+        if let tierLevel = SafetyTierList.evaluate(folderName: folderName, path: path) {
             return tierSafetyInfo(level: tierLevel, headline: friendlyHeadline)
         }
         return SafetyInfo(
