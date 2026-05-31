@@ -127,6 +127,11 @@ final class PurgeStore: ObservableObject {
     private let defaults = UserDefaults.standard
     private let gitChecker = GitStatusChecker()
 
+    private enum ScanCoalesce {
+        static let debounceNanoseconds: UInt64 = 150_000_000
+        static let flushThreshold = 100
+    }
+
     /// Cancels stale async simulator sizing when a new dev scan starts.
     private var simulatorSizingGeneration = 0
     private var scanGeneration = 0
@@ -718,6 +723,8 @@ final class PurgeStore: ObservableObject {
     }
 
     private func runFullScan(generation: Int) async {
+        let fullStart = Date()
+        ScanPhaseTiming.log("runFullScan started")
         scanCompletionHideTask?.cancel()
         errorMessage = nil
         scanPhase = .scanning
@@ -728,6 +735,7 @@ final class PurgeStore: ObservableObject {
             if scanGeneration == generation {
                 isScanningAll = false
             }
+            ScanPhaseTiming.finish("runFullScan total", since: fullStart)
         }
 
         await runGeneralScan(generation: generation)
@@ -738,6 +746,7 @@ final class PurgeStore: ObservableObject {
     }
 
     private func runGeneralScan(generation: Int) async {
+        let generalStart = Date()
         scanCompletionHideTask?.cancel()
         errorMessage = nil
         isScanningGeneral = true
@@ -746,7 +755,14 @@ final class PurgeStore: ObservableObject {
             if scanGeneration == generation {
                 isScanningGeneral = false
             }
+            ScanPhaseTiming.finish("runGeneralScan total", since: generalStart)
         }
+
+        let streamStart = Date()
+        var cacheItemsFound = 0
+        var cacheSizesResolved = 0
+        let coalesce = CacheScanCoalesceBuffers()
+        defer { coalesce.debounceTask?.cancel() }
 
         for await event in cacheScanner.scanGeneralStream() {
             guard scanGeneration == generation, !Task.isCancelled else { return }
@@ -754,21 +770,36 @@ final class PurgeStore: ObservableObject {
             case .status(let status):
                 scanStatusLine = status
             case .found(let item):
-                publishCacheItem(item)
+                cacheItemsFound += 1
+                coalesce.ingestFound(item)
+                scheduleCacheScanFlush(coalesce: coalesce, generation: generation)
             case .sizeResolved(let path, let sizeBytes, let lastModified):
-                applyCacheSize(path: path, sizeBytes: sizeBytes, lastModified: lastModified)
+                cacheSizesResolved += 1
+                coalesce.ingestSize(path: path, sizeBytes: sizeBytes, lastModified: lastModified)
+                scheduleCacheScanFlush(coalesce: coalesce, generation: generation)
             }
         }
+        coalesce.debounceTask?.cancel()
+        flushCacheScanBuffers(coalesce: coalesce, animate: true)
+        ScanPhaseTiming.finish(
+            "runGeneralScan stream",
+            since: streamStart,
+            detail: "\(cacheItemsFound) items found, \(cacheSizesResolved) sizes resolved"
+        )
 
         guard scanGeneration == generation, !Task.isCancelled else { return }
-        withAnimation(.easeInOut(duration: 0.2)) {
-            cacheItems = dedupeCacheItemsByPath(cacheItems)
-            reconcileCrossTabCacheDuplicates()
-        }
+        let hydrateStart = Date()
+        let hydrateCount = cacheItems.count
         await hydrateCacheSafetyMetadataParallel()
+        ScanPhaseTiming.finish(
+            "git enrichment (cache hydrate)",
+            since: hydrateStart,
+            detail: "\(hydrateCount) cache items"
+        )
     }
 
     private func runDeveloperScan(generation: Int) async {
+        let developerStart = Date()
         scanCompletionHideTask?.cancel()
         errorMessage = nil
         simulatorSizingGeneration += 1
@@ -778,7 +809,16 @@ final class PurgeStore: ObservableObject {
             if scanGeneration == generation {
                 isScanningDeveloper = false
             }
+            ScanPhaseTiming.finish("runDeveloperScan total", since: developerStart)
         }
+
+        let streamStart = Date()
+        var devToolsFound = 0
+        var devToolSizesResolved = 0
+        var simulatorsFound = 0
+        var simulatorSizesResolved = 0
+        let coalesce = DeveloperScanCoalesceBuffers()
+        defer { coalesce.debounceTask?.cancel() }
 
         for await event in devScanner.scanDevToolsStream() {
             guard scanGeneration == generation, !Task.isCancelled else { return }
@@ -786,24 +826,51 @@ final class PurgeStore: ObservableObject {
             case .status(let status):
                 scanStatusLine = status
             case .devToolFound(let tool):
-                publishDevTool(tool)
+                devToolsFound += 1
+                coalesce.ingestDevTool(tool)
+                scheduleDeveloperScanFlush(coalesce: coalesce, generation: generation)
             case .devToolSizeResolved(let id, let pathSizes, let sizeBytes, let lastModified):
-                applyDevToolSize(id: id, pathSizeBytesByPath: pathSizes, sizeBytes: sizeBytes, lastModified: lastModified)
-            case .projectGroupFound(let group):
-                publishProjectGroup(group)
+                devToolSizesResolved += 1
+                coalesce.ingestDevToolSize(
+                    id: id,
+                    pathSizeBytesByPath: pathSizes,
+                    sizeBytes: sizeBytes,
+                    lastModified: lastModified
+                )
+                scheduleDeveloperScanFlush(coalesce: coalesce, generation: generation)
+            case .projectGroupFound:
+                break
             case .simulatorFound(let simulator):
-                publishSimulator(simulator)
+                simulatorsFound += 1
+                coalesce.ingestSimulator(simulator)
+                scheduleDeveloperScanFlush(coalesce: coalesce, generation: generation)
             case .simulatorSizeResolved(let id, let sizeBytes):
-                applySimulatorSize(id: id, sizeBytes: sizeBytes)
+                simulatorSizesResolved += 1
+                coalesce.ingestSimulatorSize(id: id, sizeBytes: sizeBytes)
+                scheduleDeveloperScanFlush(coalesce: coalesce, generation: generation)
             }
         }
+        coalesce.debounceTask?.cancel()
+        flushDeveloperScanBuffers(coalesce: coalesce, animate: false)
+        ScanPhaseTiming.finish(
+            "runDeveloperScan stream",
+            since: streamStart,
+            detail: "\(devToolsFound) dev tools, \(devToolSizesResolved) tool sizes, \(simulatorsFound) simulators, \(simulatorSizesResolved) sim sizes"
+        )
 
         guard scanGeneration == generation, !Task.isCancelled else { return }
         let needsToolRepoHydration = devTools.contains { !$0.paths.isEmpty }
         if needsToolRepoHydration {
             isEnrichingDeveloper = true
             defer { isEnrichingDeveloper = false }
+            let hydrateStart = Date()
+            let pathCount = devTools.flatMap(\.paths).count
             await hydrateDeveloperToolRepoStatusesParallel()
+            ScanPhaseTiming.finish(
+                "git enrichment (dev tool repo hydrate)",
+                since: hydrateStart,
+                detail: "\(pathCount) dev tool paths"
+            )
         }
 
         startProjectDiscovery(generation: generation)
@@ -813,31 +880,54 @@ final class PurgeStore: ObservableObject {
         projectDiscoveryTask?.cancel()
         projectDiscoveryTask = Task { @MainActor [weak self] in
             guard let self else { return }
+            let discoveryStart = Date()
             isScanningProjects = true
             defer {
                 if self.scanGeneration == generation {
                     self.isScanningProjects = false
                     self.projectDiscoveryTask = nil
                 }
+                ScanPhaseTiming.finish("startProjectDiscovery total", since: discoveryStart)
             }
+
+            let streamStart = Date()
+            var projectGroupsFound = 0
+            let coalesce = ProjectGroupCoalesceBuffers()
+            defer { coalesce.debounceTask?.cancel() }
 
             for await event in devScanner.discoverProjectsStream() {
                 guard scanGeneration == generation, !Task.isCancelled else { return }
                 switch event {
                 case .projectGroupFound(let group):
-                    publishProjectGroup(group)
+                    projectGroupsFound += 1
+                    coalesce.ingest(group)
+                    scheduleProjectGroupFlush(coalesce: coalesce, generation: generation)
                 case .status:
                     break
                 default:
                     break
                 }
             }
+            coalesce.debounceTask?.cancel()
+            flushProjectGroupBuffers(coalesce: coalesce, animate: false)
+            ScanPhaseTiming.finish(
+                "discoverProjects stream",
+                since: streamStart,
+                detail: "\(projectGroupsFound) project groups published"
+            )
 
             guard scanGeneration == generation, !Task.isCancelled else { return }
             guard !projectGroups.isEmpty else { return }
             isEnrichingDeveloper = true
             defer { isEnrichingDeveloper = false }
+            let hydrateStart = Date()
+            let artifactCount = projectGroups.flatMap(\.artifacts).count
             await hydrateDeveloperGitStatusesParallel()
+            ScanPhaseTiming.finish(
+                "git enrichment (project artifact hydrate)",
+                since: hydrateStart,
+                detail: "\(artifactCount) project artifacts"
+            )
         }
     }
 
@@ -1099,117 +1189,353 @@ final class PurgeStore: ObservableObject {
         isEnrichingDeveloper = false
     }
 
-    private func publishCacheItem(_ item: CacheItem) {
-        let paths = item.locations.map { $0.path.standardizedFileURL.path }
-        pendingCacheSizePaths.formUnion(paths)
-        withAnimation(.easeOut(duration: 0.22)) {
-            cacheItems = DefinitionCacheGrouper.group(cacheItems + [item])
+    // MARK: - Scan stream coalescing
+
+    private final class CacheScanCoalesceBuffers {
+        var pendingFound: [CacheItem] = []
+        var pendingSizeUpdates: [String: (sizeBytes: Int64, lastModified: Date)] = [:]
+        var debounceTask: Task<Void, Never>?
+
+        var eventCount: Int { pendingFound.count + pendingSizeUpdates.count }
+
+        func ingestFound(_ item: CacheItem) {
+            pendingFound.append(item)
+        }
+
+        func ingestSize(path: String, sizeBytes: Int64, lastModified: Date) {
+            pendingSizeUpdates[path] = (sizeBytes, lastModified)
+        }
+
+        func takeSnapshot() -> (found: [CacheItem], sizes: [String: (sizeBytes: Int64, lastModified: Date)]) {
+            let snapshot = (pendingFound, pendingSizeUpdates)
+            pendingFound.removeAll(keepingCapacity: true)
+            pendingSizeUpdates.removeAll(keepingCapacity: true)
+            return snapshot
+        }
+    }
+
+    private struct DevToolSizeUpdate {
+        let pathSizeBytesByPath: [String: Int64]
+        let sizeBytes: Int64
+        let lastModified: Date
+    }
+
+    private final class DeveloperScanCoalesceBuffers {
+        var pendingTools: [String: DevTool] = [:]
+        var pendingToolSizes: [String: DevToolSizeUpdate] = [:]
+        var pendingSimulators: [UUID: SimulatorDevice] = [:]
+        var pendingSimulatorSizes: [UUID: Int64] = [:]
+        var debounceTask: Task<Void, Never>?
+
+        var eventCount: Int {
+            pendingTools.count + pendingToolSizes.count + pendingSimulators.count + pendingSimulatorSizes.count
+        }
+
+        func ingestDevTool(_ tool: DevTool) {
+            pendingTools[tool.id] = tool
+        }
+
+        func ingestDevToolSize(
+            id: String,
+            pathSizeBytesByPath: [String: Int64],
+            sizeBytes: Int64,
+            lastModified: Date
+        ) {
+            pendingToolSizes[id] = DevToolSizeUpdate(
+                pathSizeBytesByPath: pathSizeBytesByPath,
+                sizeBytes: sizeBytes,
+                lastModified: lastModified
+            )
+        }
+
+        func ingestSimulator(_ simulator: SimulatorDevice) {
+            pendingSimulators[simulator.id] = simulator
+        }
+
+        func ingestSimulatorSize(id: UUID, sizeBytes: Int64) {
+            pendingSimulatorSizes[id] = sizeBytes
+        }
+
+        func takeSnapshot() -> (
+            tools: [String: DevTool],
+            toolSizes: [String: DevToolSizeUpdate],
+            simulators: [UUID: SimulatorDevice],
+            simulatorSizes: [UUID: Int64]
+        ) {
+            let snapshot = (pendingTools, pendingToolSizes, pendingSimulators, pendingSimulatorSizes)
+            pendingTools.removeAll(keepingCapacity: true)
+            pendingToolSizes.removeAll(keepingCapacity: true)
+            pendingSimulators.removeAll(keepingCapacity: true)
+            pendingSimulatorSizes.removeAll(keepingCapacity: true)
+            return snapshot
+        }
+    }
+
+    private final class ProjectGroupCoalesceBuffers {
+        var pendingGroups: [String: ProjectGroup] = [:]
+        var debounceTask: Task<Void, Never>?
+
+        var eventCount: Int { pendingGroups.count }
+
+        func ingest(_ group: ProjectGroup) {
+            pendingGroups[group.id] = group
+        }
+
+        func takeSnapshot() -> [ProjectGroup] {
+            let snapshot = Array(pendingGroups.values)
+            pendingGroups.removeAll(keepingCapacity: true)
+            return snapshot
+        }
+    }
+
+    private func scheduleCacheScanFlush(coalesce: CacheScanCoalesceBuffers, generation: Int) {
+        if coalesce.eventCount >= ScanCoalesce.flushThreshold {
+            coalesce.debounceTask?.cancel()
+            coalesce.debounceTask = nil
+            flushCacheScanBuffers(coalesce: coalesce, animate: false)
+            return
+        }
+
+        coalesce.debounceTask?.cancel()
+        coalesce.debounceTask = Task { @MainActor [weak self, weak coalesce] in
+            try? await Task.sleep(nanoseconds: ScanCoalesce.debounceNanoseconds)
+            guard let self, let coalesce, !Task.isCancelled else { return }
+            guard self.scanGeneration == generation else { return }
+            self.flushCacheScanBuffers(coalesce: coalesce, animate: false)
+        }
+    }
+
+    private func flushCacheScanBuffers(coalesce: CacheScanCoalesceBuffers, animate: Bool) {
+        guard coalesce.eventCount > 0 else { return }
+        let snapshot = coalesce.takeSnapshot()
+        flushCacheScanBuffers(found: snapshot.found, sizes: snapshot.sizes, animate: animate)
+    }
+
+    private func flushCacheScanBuffers(
+        found: [CacheItem],
+        sizes: [String: (sizeBytes: Int64, lastModified: Date)],
+        animate: Bool
+    ) {
+        guard !found.isEmpty || !sizes.isEmpty else { return }
+
+        var items = cacheItems
+        if !found.isEmpty {
+            items.append(contentsOf: found)
+            for item in found {
+                pendingCacheSizePaths.formUnion(
+                    item.locations.map { $0.path.standardizedFileURL.path }
+                )
+            }
+        }
+        if !sizes.isEmpty {
+            items = applyCacheSizeUpdates(items, updates: sizes)
+            for path in sizes.keys {
+                pendingCacheSizePaths.remove(path)
+            }
+        }
+
+        items = DefinitionCacheGrouper.group(items)
+        items = dedupeCacheItemsByPath(items)
+
+        if animate {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                cacheItems = items
+                reconcileCrossTabCacheDuplicates()
+            }
+        } else {
+            cacheItems = items
             reconcileCrossTabCacheDuplicates()
         }
     }
 
-    private func applyCacheSize(path: String, sizeBytes: Int64, lastModified: Date) {
-        pendingCacheSizePaths.remove(path)
+    private func applyCacheSizeUpdates(
+        _ items: [CacheItem],
+        updates: [String: (sizeBytes: Int64, lastModified: Date)]
+    ) -> [CacheItem] {
+        guard !updates.isEmpty else { return items }
+
         var updated: [CacheItem] = []
-        for item in cacheItems {
+        updated.reserveCapacity(items.count)
+
+        for item in items {
+            let hasMatch = item.locations.contains { location in
+                updates[location.path.standardizedFileURL.path] != nil
+            }
+            guard hasMatch else {
+                updated.append(item)
+                continue
+            }
+
             let locations = item.locations.compactMap { location -> CacheLocation? in
-                guard location.path.standardizedFileURL.path == path else { return location }
-                guard sizeBytes > 0 else { return nil }
+                let pathKey = location.path.standardizedFileURL.path
+                guard let update = updates[pathKey] else { return location }
+                guard update.sizeBytes > 0 else { return nil }
                 return CacheLocation(
                     path: location.path,
-                    sizeBytes: sizeBytes,
-                    lastModified: lastModified,
+                    sizeBytes: update.sizeBytes,
+                    lastModified: update.lastModified,
                     folderName: location.folderName
                 )
             }
             guard !locations.isEmpty else { continue }
             updated.append(item.withLocations(locations))
         }
-        withAnimation(.easeInOut(duration: 0.2)) {
-            cacheItems = DefinitionCacheGrouper.group(updated)
-            reconcileCrossTabCacheDuplicates()
+        return updated
+    }
+
+    private func scheduleDeveloperScanFlush(coalesce: DeveloperScanCoalesceBuffers, generation: Int) {
+        if coalesce.eventCount >= ScanCoalesce.flushThreshold {
+            coalesce.debounceTask?.cancel()
+            coalesce.debounceTask = nil
+            flushDeveloperScanBuffers(coalesce: coalesce, animate: false)
+            return
+        }
+
+        coalesce.debounceTask?.cancel()
+        coalesce.debounceTask = Task { @MainActor [weak self, weak coalesce] in
+            try? await Task.sleep(nanoseconds: ScanCoalesce.debounceNanoseconds)
+            guard let self, let coalesce, !Task.isCancelled else { return }
+            guard self.scanGeneration == generation else { return }
+            self.flushDeveloperScanBuffers(coalesce: coalesce, animate: false)
         }
     }
 
-    private func publishDevTool(_ tool: DevTool) {
-        pendingDevToolSizeIDs.insert(tool.id)
-        withAnimation(.easeOut(duration: 0.22)) {
-            if let index = devTools.firstIndex(where: { $0.id == tool.id }) {
-                devTools[index] = tool
-            } else {
-                devTools.append(tool)
-            }
-            devTools.sort { $0.sizeBytes > $1.sizeBytes }
-            reconcileCrossTabCacheDuplicates()
-        }
-    }
-
-    private func applyDevToolSize(
-        id: String,
-        pathSizeBytesByPath: [String: Int64],
-        sizeBytes: Int64,
-        lastModified: Date
-    ) {
-        pendingDevToolSizeIDs.remove(id)
-        guard let index = devTools.firstIndex(where: { $0.id == id }) else { return }
-        let tool = devTools[index]
-        let updated = DevTool(
-            definitionKey: tool.definitionKey,
-            toolName: tool.toolName,
-            paths: tool.paths,
-            sizeBytes: sizeBytes,
-            pathSizeBytesByPath: pathSizeBytesByPath,
-            lastModified: lastModified,
-            isSelected: tool.isSelected && sizeBytes > 0,
-            isDetected: sizeBytes > 0,
-            safetyInfo: tool.safetyInfo,
-            reinstallSafety: tool.reinstallSafety
+    private func flushDeveloperScanBuffers(coalesce: DeveloperScanCoalesceBuffers, animate: Bool) {
+        guard coalesce.eventCount > 0 else { return }
+        let snapshot = coalesce.takeSnapshot()
+        flushDeveloperScanBuffers(
+            tools: snapshot.tools,
+            toolSizes: snapshot.toolSizes,
+            simulators: snapshot.simulators,
+            simulatorSizes: snapshot.simulatorSizes,
+            animate: animate
         )
-        withAnimation(.easeInOut(duration: 0.2)) {
-            if updated.isDetected {
-                devTools[index] = updated
-                devTools.sort { $0.sizeBytes > $1.sizeBytes }
-            } else {
-                devTools.remove(at: index)
+    }
+
+    private func flushDeveloperScanBuffers(
+        tools: [String: DevTool],
+        toolSizes: [String: DevToolSizeUpdate],
+        simulators: [UUID: SimulatorDevice],
+        simulatorSizes: [UUID: Int64],
+        animate: Bool
+    ) {
+        guard !tools.isEmpty || !toolSizes.isEmpty || !simulators.isEmpty || !simulatorSizes.isEmpty else {
+            return
+        }
+
+        let apply = {
+            for tool in tools.values {
+                self.pendingDevToolSizeIDs.insert(tool.id)
+                if let index = self.devTools.firstIndex(where: { $0.id == tool.id }) {
+                    self.devTools[index] = tool
+                } else {
+                    self.devTools.append(tool)
+                }
             }
-            reconcileCrossTabCacheDuplicates()
+
+            for (id, update) in toolSizes {
+                self.pendingDevToolSizeIDs.remove(id)
+                guard let index = self.devTools.firstIndex(where: { $0.id == id }) else { continue }
+                let tool = self.devTools[index]
+                let updated = DevTool(
+                    definitionKey: tool.definitionKey,
+                    toolName: tool.toolName,
+                    paths: tool.paths,
+                    sizeBytes: update.sizeBytes,
+                    pathSizeBytesByPath: update.pathSizeBytesByPath,
+                    lastModified: update.lastModified,
+                    isSelected: tool.isSelected && update.sizeBytes > 0,
+                    isDetected: update.sizeBytes > 0,
+                    safetyInfo: tool.safetyInfo,
+                    reinstallSafety: tool.reinstallSafety
+                )
+                if updated.isDetected {
+                    self.devTools[index] = updated
+                } else {
+                    self.devTools.remove(at: index)
+                }
+            }
+
+            if !tools.isEmpty || !toolSizes.isEmpty {
+                self.devTools.sort { $0.sizeBytes > $1.sizeBytes }
+            }
+
+            for simulator in simulators.values {
+                if let index = self.simulatorDevices.firstIndex(where: { $0.id == simulator.id }) {
+                    self.simulatorDevices[index] = simulator
+                } else {
+                    self.simulatorDevices.append(simulator)
+                }
+            }
+
+            for (id, sizeBytes) in simulatorSizes {
+                guard let index = self.simulatorDevices.firstIndex(where: { $0.id == id }) else { continue }
+                if sizeBytes > 0 {
+                    self.simulatorDevices[index].sizeOnDisk = sizeBytes
+                } else {
+                    self.simulatorDevices.remove(at: index)
+                }
+            }
+
+            if !simulators.isEmpty || !simulatorSizes.isEmpty {
+                self.simulatorDevices.sort { ($0.sizeOnDisk ?? 0) > ($1.sizeOnDisk ?? 0) }
+            }
+
+            self.reconcileCrossTabCacheDuplicates()
+        }
+
+        if animate {
+            withAnimation(.easeInOut(duration: 0.2)) { apply() }
+        } else {
+            apply()
         }
     }
 
-    private func publishProjectGroup(_ group: ProjectGroup) {
-        let paths = group.artifacts.map { $0.path.standardizedFileURL.path }
-        pendingProjectArtifactPaths.formUnion(paths.filter { path in
-            group.artifacts.first { $0.path.standardizedFileURL.path == path }?.sizeBytes == 0
-        })
-        withAnimation(.easeOut(duration: 0.22)) {
-            if let index = projectGroups.firstIndex(where: { $0.id == group.id }) {
-                projectGroups[index] = group
-            } else {
-                projectGroups.append(group)
-            }
-            projectGroups.sort { $0.totalBytes > $1.totalBytes }
+    private func scheduleProjectGroupFlush(coalesce: ProjectGroupCoalesceBuffers, generation: Int) {
+        if coalesce.eventCount >= ScanCoalesce.flushThreshold {
+            coalesce.debounceTask?.cancel()
+            coalesce.debounceTask = nil
+            flushProjectGroupBuffers(coalesce: coalesce, animate: false)
+            return
+        }
+
+        coalesce.debounceTask?.cancel()
+        coalesce.debounceTask = Task { @MainActor [weak self, weak coalesce] in
+            try? await Task.sleep(nanoseconds: ScanCoalesce.debounceNanoseconds)
+            guard let self, let coalesce, !Task.isCancelled else { return }
+            guard self.scanGeneration == generation else { return }
+            self.flushProjectGroupBuffers(coalesce: coalesce, animate: false)
         }
     }
 
-    private func publishSimulator(_ simulator: SimulatorDevice) {
-        withAnimation(.easeOut(duration: 0.22)) {
-            if let index = simulatorDevices.firstIndex(where: { $0.id == simulator.id }) {
-                simulatorDevices[index] = simulator
-            } else {
-                simulatorDevices.append(simulator)
-            }
-        }
+    private func flushProjectGroupBuffers(coalesce: ProjectGroupCoalesceBuffers, animate: Bool) {
+        guard coalesce.eventCount > 0 else { return }
+        let groups = coalesce.takeSnapshot()
+        flushProjectGroupBuffers(groups: groups, animate: animate)
     }
 
-    private func applySimulatorSize(id: UUID, sizeBytes: Int64) {
-        guard let index = simulatorDevices.firstIndex(where: { $0.id == id }) else { return }
-        withAnimation(.easeInOut(duration: 0.2)) {
-            if sizeBytes > 0 {
-                simulatorDevices[index].sizeOnDisk = sizeBytes
-                simulatorDevices.sort { ($0.sizeOnDisk ?? 0) > ($1.sizeOnDisk ?? 0) }
-            } else {
-                simulatorDevices.remove(at: index)
+    private func flushProjectGroupBuffers(groups: [ProjectGroup], animate: Bool) {
+        guard !groups.isEmpty else { return }
+
+        let apply = {
+            for group in groups {
+                let paths = group.artifacts.map { $0.path.standardizedFileURL.path }
+                self.pendingProjectArtifactPaths.formUnion(paths.filter { path in
+                    group.artifacts.first { $0.path.standardizedFileURL.path == path }?.sizeBytes == 0
+                })
+                if let index = self.projectGroups.firstIndex(where: { $0.id == group.id }) {
+                    self.projectGroups[index] = group
+                } else {
+                    self.projectGroups.append(group)
+                }
             }
+            self.projectGroups.sort { $0.totalBytes > $1.totalBytes }
+        }
+
+        if animate {
+            withAnimation(.easeInOut(duration: 0.2)) { apply() }
+        } else {
+            apply()
         }
     }
 

@@ -157,7 +157,13 @@ final class DevScanner {
 
     private func runDeveloperScan(continuation: AsyncStream<DeveloperScanEvent>.Continuation) async {
         continuation.yield(.status("Scanning Dev Tools..."))
+        let globalDiscoveryStart = Date()
         let (tools, toolSizeJobs) = scanGlobalCachePlaceholders()
+        ScanPhaseTiming.finish(
+            "global dev tool discovery",
+            since: globalDiscoveryStart,
+            detail: "\(tools.count) tools, \(toolSizeJobs.count) size jobs"
+        )
         for tool in tools {
             if Task.isCancelled {
                 continuation.finish()
@@ -169,18 +175,37 @@ final class DevScanner {
         await withTaskGroup(of: Void.self) { group in
             group.addTask { [toolSizeJobs] in
                 continuation.yield(.status("Calculating Dev Tool sizes..."))
+                let sizingStart = Date()
                 await self.runDevToolSizeJobs(toolSizeJobs, continuation: continuation)
+                let pathCount = toolSizeJobs.reduce(0) { $0 + $1.paths.count }
+                ScanPhaseTiming.finish(
+                    "global dev tool sizing",
+                    since: sizingStart,
+                    detail: "\(toolSizeJobs.count) tools, \(pathCount) paths"
+                )
             }
 
             group.addTask {
                 if Task.isCancelled { return }
                 continuation.yield(.status("Scanning iOS Simulators..."))
+                let simDiscoveryStart = Date()
                 let simulators = await self.discoverShutdownSimulatorsWithoutSizes()
+                ScanPhaseTiming.finish(
+                    "simulator discovery",
+                    since: simDiscoveryStart,
+                    detail: "\(simulators.count) shutdown simulators"
+                )
                 for simulator in simulators {
                     if Task.isCancelled { return }
                     continuation.yield(.simulatorFound(simulator))
                 }
+                let simSizingStart = Date()
                 await self.runSimulatorSizeJobs(simulators, continuation: continuation)
+                ScanPhaseTiming.finish(
+                    "simulator sizing",
+                    since: simSizingStart,
+                    detail: "\(simulators.count) device folders"
+                )
             }
         }
 
@@ -895,8 +920,10 @@ final class DevScanner {
             home.appendingPathComponent("Apps", isDirectory: true),
         ]
 
+        let walkStart = Date()
         let fm = FileManager.default
         var discoveredRoots: [(URL, [ProjectType])] = []
+        var directoriesWalked = 0
 
         func shouldSkipDescending(into name: String) -> Bool {
             switch name {
@@ -951,6 +978,7 @@ final class DevScanner {
 
         func walk(directory: URL, depth: Int, maxDepth: Int) {
             guard depth <= maxDepth else { return }
+            directoriesWalked += 1
 
             let types = listTypes(at: directory)
             if !types.isEmpty {
@@ -1007,8 +1035,21 @@ final class DevScanner {
 
         discoveredRoots.sort { $0.0.path.count < $1.0.path.count }
 
+        ScanPhaseTiming.finish(
+            "discoverProjects walk",
+            since: walkStart,
+            detail: "walked \(directoriesWalked) directories, found \(discoveredRoots.count) project roots"
+        )
+
         /// Build artifact list per root (expensive sizing runs concurrently).
-        return await buildProjectGroups(for: discoveredRoots, continuation: continuation)
+        let sizingStart = Date()
+        let (groups, artifactsSized) = await buildProjectGroups(for: discoveredRoots, continuation: continuation)
+        ScanPhaseTiming.finish(
+            "project artifact sizing",
+            since: sizingStart,
+            detail: "\(artifactsSized) artifacts sized, \(groups.count) project groups"
+        )
+        return groups
     }
 
     private func containsXcodeBundle(in directory: URL) -> Bool {
@@ -1043,14 +1084,14 @@ final class DevScanner {
     private func buildProjectGroups(
         for discovered: [(URL, [ProjectType])],
         continuation: AsyncStream<DeveloperScanEvent>.Continuation? = nil
-    ) async -> [ProjectGroup] {
-        guard !discovered.isEmpty else { return [] }
+    ) async -> (groups: [ProjectGroup], artifactsSized: Int) {
+        guard !discovered.isEmpty else { return ([], 0) }
 
-        return await withTaskGroup(of: ProjectGroup?.self) { group in
+        return await withTaskGroup(of: (ProjectGroup?, Int).self) { group in
             for (rootURL, types) in discovered {
                 group.addTask { [rootURL, types] in
                     let rows = DevScanner.collectArtifacts(projectRoot: rootURL, types: types)
-                    guard !rows.isEmpty else { return nil }
+                    guard !rows.isEmpty else { return (nil, 0) }
 
                     let artifactPaths = rows.map(\.path)
                     let sizesByPath = FolderSizing.directorySizes(at: artifactPaths)
@@ -1087,25 +1128,30 @@ final class DevScanner {
                         }
                     }
 
-                    guard !staleArtifacts.isEmpty else { return nil }
+                    guard !staleArtifacts.isEmpty else { return (nil, rows.count) }
 
-                    return ProjectGroup(
-                        displayName: rootURL.lastPathComponent,
-                        rootPath: rootURL,
-                        inferredTypes: types,
-                        artifacts: staleArtifacts
+                    return (
+                        ProjectGroup(
+                            displayName: rootURL.lastPathComponent,
+                            rootPath: rootURL,
+                            inferredTypes: types,
+                            artifacts: staleArtifacts
+                        ),
+                        rows.count
                     )
                 }
             }
 
             var groups: [ProjectGroup] = []
-            for await g in group {
-                if let g {
+            var artifactsSized = 0
+            for await result in group {
+                artifactsSized += result.1
+                if let g = result.0 {
                     groups.append(g)
                     continuation?.yield(.projectGroupFound(g))
                 }
             }
-            return groups
+            return (groups, artifactsSized)
         }
     }
 

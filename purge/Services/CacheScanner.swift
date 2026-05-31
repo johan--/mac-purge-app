@@ -61,6 +61,7 @@ final class CacheScanner {
     }
 
     private func runGeneralScan(continuation: AsyncStream<CacheScanEvent>.Continuation) async {
+        let discoveryStart = Date()
         let home = FileManager.default.homeDirectoryForCurrentUser
         let cachesURL = home.appendingPathComponent("Library/Caches", isDirectory: true)
         var sizeJobs: [SizeJob] = []
@@ -198,8 +199,20 @@ final class CacheScanner {
             sizeJobs.append(SizeJob(path: url))
         }
 
+        ScanPhaseTiming.finish(
+            "app cache discovery",
+            since: discoveryStart,
+            detail: "\(sizeJobs.count) cache locations queued, \(collectedPaths.count) unique paths"
+        )
+
         continuation.yield(.status("Calculating sizes..."))
+        let sizingStart = Date()
         await runSizeJobs(sizeJobs, continuation: continuation)
+        ScanPhaseTiming.finish(
+            "app cache sizing",
+            since: sizingStart,
+            detail: "\(sizeJobs.count) du batch paths"
+        )
         continuation.finish()
     }
 
