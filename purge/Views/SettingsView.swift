@@ -699,25 +699,6 @@ struct SettingsView: View {
         return scanDate < cutoff
     }
 
-    private func relativeDateText(for date: Date, referenceDate: Date) -> String {
-        let calendar = Calendar.current
-        if calendar.isDate(date, inSameDayAs: referenceDate) {
-            return "Today"
-        }
-        if let tomorrow = calendar.date(byAdding: .day, value: 1, to: referenceDate),
-           calendar.isDate(date, inSameDayAs: tomorrow) {
-            return "Tomorrow"
-        }
-        if let yesterday = calendar.date(byAdding: .day, value: -1, to: referenceDate),
-           calendar.isDate(date, inSameDayAs: yesterday) {
-            return "Yesterday"
-        }
-
-        let relative = Self.relativeDateFormatter.localizedString(for: date, relativeTo: referenceDate)
-        guard let first = relative.first else { return relative }
-        return first.uppercased() + String(relative.dropFirst())
-    }
-
     private func formattedDate(_ date: Date) -> String {
         Self.dateFormatter.string(from: date)
     }
@@ -726,13 +707,6 @@ struct SettingsView: View {
         let formatter = DateFormatter()
         formatter.dateStyle = .long
         formatter.timeStyle = .none
-        return formatter
-    }()
-
-    private static let relativeDateFormatter: RelativeDateTimeFormatter = {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .full
-        formatter.formattingContext = .beginningOfSentence
         return formatter
     }()
 

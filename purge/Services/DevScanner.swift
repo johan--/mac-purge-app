@@ -637,6 +637,7 @@ final class DevScanner {
             let paths = entry.paths
             let existing = paths.filter {
                 FileManager.default.fileExists(atPath: $0.path)
+                    && DeletionSafetyPolicy.isOfferedForCleanup($0)
             }
             guard !existing.isEmpty else { return nil }
 
@@ -744,6 +745,7 @@ final class DevScanner {
             let paths = entry.paths
             let existing = paths.filter {
                 FileManager.default.fileExists(atPath: $0.path)
+                    && DeletionSafetyPolicy.isOfferedForCleanup($0)
             }
 
             var pathSizes: [String: Int64] = [:]
@@ -1169,6 +1171,7 @@ final class DevScanner {
 
         func addIfDir(kind: DeletableArtifactKind, url: URL) {
             guard fm.fileExists(atPath: url.path) else { return }
+            guard DeletionSafetyPolicy.isOfferedForCleanup(url) else { return }
             var isDir = false
             if let rv = try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory {
                 isDir = rv

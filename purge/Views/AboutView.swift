@@ -2,6 +2,8 @@ import AppKit
 import SwiftUI
 
 struct AboutView: View {
+    @EnvironmentObject private var store: PurgeStore
+    @ObservedObject private var history = CleanupHistoryStore.shared
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     var showsPageHeader = true
     /// When true, the parent owns scrolling and the macOS 26 progressive scroll-edge blur.
@@ -31,6 +33,7 @@ struct AboutView: View {
     private var aboutScrollContent: some View {
         VStack(alignment: .leading, spacing: 20) {
             appIdentitySection
+            lifetimeStatsSection
             whatsNewSection
             comingNextSection
             actionCardSection
@@ -65,6 +68,100 @@ struct AboutView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private var lifetimeStatsSection: some View {
+        aboutCard {
+            VStack(spacing: 8) {
+                if showsLifetimeStatsPlaceholder {
+                    lifetimeStatsPlaceholder
+                } else {
+                    lifetimeStatsContent
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 18)
+        }
+    }
+
+    private var showsLifetimeStatsPlaceholder: Bool {
+        !store.hasDisplayableLifetimeStats
+    }
+
+    private var lifetimeStatsPlaceholder: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "externaldrive.badge.minus")
+                .font(.system(size: 28, weight: .medium))
+                .foregroundStyle(.tertiary)
+                .symbolRenderingMode(.hierarchical)
+                .accessibilityHidden(true)
+
+            Text("Nothing cleaned yet")
+                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .accessibilityLabel("Nothing cleaned yet")
+
+            Text("Run your first scan to get started")
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var lifetimeStatsContent: some View {
+        VStack(spacing: 8) {
+            Text("Lifetime cleaned")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .multilineTextAlignment(.center)
+                .accessibilityHidden(true)
+
+            Text(formatBytes(store.totalRecoveredBytes))
+                .font(.system(size: 36, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .multilineTextAlignment(.center)
+                .accessibilityLabel("Lifetime cleaned, \(formatBytes(store.totalRecoveredBytes))")
+
+            if let comparisonItem = LifetimeSizeComparison.item(for: store.totalRecoveredBytes) {
+                LifetimeSizeComparisonChip(item: comparisonItem)
+                    .padding(.top, 4)
+            }
+
+            if cleanupCount > 0, let lastCleanedDate {
+                VStack(spacing: 0) {
+                    Rectangle()
+                        .fill(AppStyle.hairline)
+                        .frame(height: 0.5)
+                        .padding(.top, 10)
+                        .padding(.bottom, 12)
+
+                    TimelineView(.periodic(from: Date(), by: 60)) { context in
+                        Text(lifetimeStatsMetaLine(lastCleanedDate: lastCleanedDate, referenceDate: context.date))
+                            .font(.system(size: 11, weight: .regular))
+                            .foregroundStyle(.tertiary)
+                            .multilineTextAlignment(.center)
+                    }
+                }
+            }
+        }
+    }
+
+    private var cleanupCount: Int {
+        history.archive.entries.count
+    }
+
+    private var lastCleanedDate: Date? {
+        history.archive.entries.first?.date
+    }
+
+    private func lifetimeStatsMetaLine(lastCleanedDate: Date, referenceDate: Date) -> String {
+        let countLabel = cleanupCount == 1 ? "cleanup" : "cleanups"
+        let relativeDate = relativeDateText(for: lastCleanedDate, referenceDate: referenceDate)
+        return "\(cleanupCount) \(countLabel) · Last cleaned \(relativeDate)"
     }
 
     private var whatsNewSection: some View {
@@ -272,6 +369,34 @@ private struct FeatureItem {
     let icon: String
     let title: String
     let description: String
+}
+
+private struct LifetimeSizeComparisonChip: View {
+    let item: OnboardingSizeComparisonItem
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: item.symbol)
+                .imageScale(.small)
+                .accessibilityHidden(true)
+
+            Text(item.label)
+                .lineLimit(1)
+        }
+        .font(.system(size: 13, weight: .medium))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background {
+            Capsule(style: .continuous)
+                .fill(Color.primary.opacity(0.07))
+        }
+        .overlay {
+            Capsule(style: .continuous)
+                .stroke(Color.primary.opacity(0.16), lineWidth: 1)
+        }
+        .accessibilityLabel(item.label)
+    }
 }
 
 private struct AboutActionRow: View {

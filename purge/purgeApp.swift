@@ -42,8 +42,15 @@ struct PurgeApp: App {
                 NSApp.windows.first?.makeKeyAndOrderFront(nil)
             }
             Divider()
-            Text("Recoverable: \(formatBytes(store.recoverableTotalBytes))")
-            Text("Recovered so far: \(formatBytes(store.totalRecoveredBytes))")
+            VStack(alignment: .leading, spacing: 2) {
+                Text(formatBytes(store.recoverableTotalBytes))
+                    .font(.headline)
+                Text("\(formatBytes(store.totalRecoveredBytes)) recovered so far")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 2)
             Divider()
             Button("Clean Safe Files Now") {
                 Task { await store.performManualSafeCleanNow() }

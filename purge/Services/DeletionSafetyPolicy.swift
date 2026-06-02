@@ -26,19 +26,12 @@ enum DeletionSafetyDecision: Equatable {
 /// Both manual and scheduled cleanup must run paths through `evaluate(_:)` before
 /// touching the disk. Any path not explicitly allowed is refused.
 enum DeletionSafetyPolicy {
-    /// System-level cache and log paths that may be deleted when explicitly whitelisted.
+    /// System-level paths that require administrator privileges — not offered for cleanup.
     nonisolated static let systemCacheDeletionPrefixes: [String] = [
         "/Library/Caches",
         "/Library/Updates",
         "/private/var/log",
         "/private/var/db/DiagnosticPipeline",
-        "/Library/Logs/DiagnosticReports"
-    ]
-
-    /// System paths where only children may be removed; the directory itself must remain.
-    nonisolated static let systemCacheContentsOnlyPrefixes: [String] = [
-        "/Library/Caches",
-        "/private/var/log",
         "/Library/Logs/DiagnosticReports"
     ]
 
@@ -111,6 +104,7 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/Developer/Xcode/DerivedData",
             "\(home)/Library/Developer/Xcode/iOS DeviceSupport",
             "\(home)/Library/Developer/Xcode/DocumentationCache",
+            "\(home)/Library/Developer/Xcode/Archives",
             "\(home)/.npm",
             "\(home)/.npm/_npx",
             "\(home)/.npm/_logs",
@@ -118,8 +112,15 @@ enum DeletionSafetyPolicy {
             "\(home)/.yarn/cache",
             "\(home)/.pnpm-store",
             "\(home)/.gradle/caches",
+            "\(home)/.android",
+            "\(home)/.cocoapods",
+            "\(home)/.sbt",
+            "\(home)/.ivy2/cache",
+            "\(home)/.cache/act",
+            "\(home)/.zcompdump",
             "\(home)/.cargo/registry",
             "\(home)/.pub-cache",
+            "\(home)/.flutter",
             "\(home)/Library/Application Support/MobileSync/Backup",
             "\(home)/Library/Logs",
             "\(home)/Library/Logs/DiagnosticReports",
@@ -156,12 +157,66 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/Application Support/Figma/Cache",
             "\(home)/Library/Containers/com.docker.docker",
             "\(home)/.vagrant.d/boxes",
-            "/Library/Caches",
-            "/Library/Updates",
-            "/private/var/log",
-            "/private/var/db/DiagnosticPipeline",
-            "/Library/Logs/DiagnosticReports"
+            "/Applications/Install macOS"
         ]
+    }
+
+    /// Whether Purge may offer this path for manual or scheduled cleanup (no admin prompt).
+    nonisolated static func isOfferedForCleanup(_ url: URL) -> Bool {
+        if requiresAdminPrivileges(for: url) { return false }
+        return evaluate(url) == .allow
+    }
+
+    nonisolated static func filterCacheItems(_ items: [CacheItem]) -> [CacheItem] {
+        items.compactMap(filterCacheItem)
+    }
+
+    nonisolated static func filterCacheItem(_ item: CacheItem) -> CacheItem? {
+        let locations = item.locations.filter { isOfferedForCleanup($0.path) }
+        guard !locations.isEmpty else { return nil }
+        guard locations.count != item.locations.count else { return item }
+        return item.withLocations(locations)
+    }
+
+    nonisolated static func devToolFilteredToOfferedCleanup(_ tool: DevTool) -> DevTool? {
+        let paths = tool.paths.filter { isOfferedForCleanup($0) }
+        guard !paths.isEmpty else { return nil }
+
+        let allowedKeys = Set(paths.map { $0.standardizedFileURL.path })
+        let pathSizes = tool.pathSizeBytesByPath.filter { allowedKeys.contains($0.key) }
+        let sizedBytes = pathSizes.values.reduce(Int64(0), +)
+        let sizeBytes = sizedBytes > 0 ? sizedBytes : (pathSizes.isEmpty ? tool.sizeBytes : 0)
+        let stillDetected = !paths.isEmpty && (sizeBytes > 0 || pathSizes.isEmpty)
+
+        return DevTool(
+            definitionKey: tool.definitionKey,
+            toolName: tool.toolName,
+            paths: paths.map(\.standardizedFileURL),
+            sizeBytes: sizeBytes,
+            pathSizeBytesByPath: pathSizes,
+            lastModified: tool.lastModified,
+            isSelected: tool.isSelected && stillDetected,
+            isDetected: stillDetected,
+            safetyInfo: tool.safetyInfo,
+            reinstallSafety: tool.reinstallSafety
+        )
+    }
+
+    nonisolated static func projectGroupFilteredToOfferedCleanup(_ group: ProjectGroup) -> ProjectGroup? {
+        let artifacts = group.artifacts.filter { isOfferedForCleanup($0.path) }
+        guard !artifacts.isEmpty else { return nil }
+        guard artifacts.count != group.artifacts.count else { return group }
+        return ProjectGroup(
+            displayName: group.displayName,
+            rootPath: group.rootPath,
+            inferredTypes: group.inferredTypes,
+            artifacts: artifacts
+        )
+    }
+
+    nonisolated static func simulatorFilteredToOfferedCleanup(_ device: SimulatorDevice) -> SimulatorDevice? {
+        guard isOfferedForCleanup(device.folderURL) else { return nil }
+        return device
     }
 
     /// Paths where only children may be removed; the directory itself must remain.
@@ -170,7 +225,7 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/Logs",
             "\(home)/Library/Logs/DiagnosticReports",
             "\(home)/Library/Caches"
-        ] + systemCacheContentsOnlyPrefixes
+        ]
     }
 
     nonisolated static func requiresAdminPrivileges(for url: URL) -> Bool {

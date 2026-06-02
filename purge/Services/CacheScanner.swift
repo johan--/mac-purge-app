@@ -139,6 +139,7 @@ final class CacheScanner {
             let displayName = location.displayName
             let url = location.url.standardizedFileURL
             guard FileManager.default.fileExists(atPath: url.path) else { continue }
+            guard DeletionSafetyPolicy.isOfferedForCleanup(url) else { continue }
             let folderName = url.lastPathComponent
             let safetyInfo = ExplanationResolver.initialSafetyForCacheFolder(
                 folderName: folderName,
@@ -156,43 +157,6 @@ final class CacheScanner {
                         folderName: folderName
                     ),
                     appName: displayName,
-                    safetyInfo: safetyInfo
-                )
-            ))
-            sizeJobs.append(SizeJob(path: url))
-        }
-
-        continuation.yield(.status("Scanning System Caches..."))
-        for location in systemCacheLocations() {
-            if Task.isCancelled {
-                continuation.finish()
-                return
-            }
-            let displayName = location.displayName
-            let url = location.url.standardizedFileURL
-            guard FileManager.default.fileExists(atPath: url.path) else { continue }
-            let folderName = url.lastPathComponent
-            let headline = "System Caches — \(displayName)"
-            let pathKey = url.path
-            guard !collectedPaths.contains(pathKey) else { continue }
-            collectedPaths.insert(pathKey)
-
-            let safetyInfo = ExplanationResolver.initialSafetyForCacheFolder(
-                folderName: location.definitionKey,
-                friendlyHeadline: headline,
-                path: url
-            )
-
-            continuation.yield(.found(
-                CacheItem(
-                    definitionKey: location.definitionKey,
-                    location: CacheLocation(
-                        path: url,
-                        sizeBytes: 0,
-                        lastModified: .distantPast,
-                        folderName: folderName
-                    ),
-                    appName: headline,
                     safetyInfo: safetyInfo
                 )
             ))
@@ -229,6 +193,7 @@ final class CacheScanner {
             guard !excludedFromGeneralScan.contains(bundleID) else { return nil }
 
             let pathKey = directory.standardizedFileURL.path
+            guard DeletionSafetyPolicy.isOfferedForCleanup(directory) else { return nil }
             guard !collectedPaths.contains(pathKey) else { return nil }
             collectedPaths.insert(pathKey)
 
@@ -326,6 +291,7 @@ final class CacheScanner {
             let version = frameworkVersionURL.lastPathComponent
             let headline = "\(appName) Old Version \(version)"
             let pathKey = frameworkVersionURL.standardizedFileURL.path
+            guard DeletionSafetyPolicy.isOfferedForCleanup(frameworkVersionURL) else { continue }
             guard !collectedPaths.contains(pathKey) else { continue }
             collectedPaths.insert(pathKey)
 
@@ -360,6 +326,7 @@ final class CacheScanner {
         collectedPaths: inout Set<String>
     ) -> CacheItem? {
         let pathKey = url.standardizedFileURL.path
+        guard DeletionSafetyPolicy.isOfferedForCleanup(url) else { return nil }
         guard !collectedPaths.contains(pathKey) else { return nil }
         collectedPaths.insert(pathKey)
 
@@ -495,36 +462,6 @@ final class CacheScanner {
             (
                 "Font Cache",
                 home.appendingPathComponent("Library/Caches/com.apple.ATS", isDirectory: true)
-            )
-        ]
-    }
-
-    private func systemCacheLocations() -> [(displayName: String, url: URL, definitionKey: String)] {
-        [
-            (
-                "System App Caches",
-                URL(fileURLWithPath: "/Library/Caches", isDirectory: true),
-                "system-library-caches"
-            ),
-            (
-                "macOS Software Updates",
-                URL(fileURLWithPath: "/Library/Updates", isDirectory: true),
-                "system-library-updates"
-            ),
-            (
-                "System Log Files",
-                URL(fileURLWithPath: "/private/var/log", isDirectory: true),
-                "system-var-log"
-            ),
-            (
-                "Diagnostic Pipeline Data",
-                URL(fileURLWithPath: "/private/var/db/DiagnosticPipeline", isDirectory: true),
-                "system-diagnostic-pipeline"
-            ),
-            (
-                "System Crash Reports",
-                URL(fileURLWithPath: "/Library/Logs/DiagnosticReports", isDirectory: true),
-                "system-diagnostic-reports"
             )
         ]
     }

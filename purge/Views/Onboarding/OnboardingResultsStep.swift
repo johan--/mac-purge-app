@@ -36,11 +36,6 @@ extension PurgeStore {
       }
     }
 
-    for item in cacheItems where item.safetyInfo.level == .safe {
-      guard Self.isSystemCacheItem(item) else { continue }
-      systemJunkBytes += item.sizeBytes
-    }
-
     let candidates = [
       OnboardingResultsCategory(title: "App caches", symbol: "internaldrive", bytes: appCacheBytes),
       OnboardingResultsCategory(title: "Dev tool artifacts", symbol: "hammer", bytes: devArtifactBytes),
@@ -98,11 +93,7 @@ extension PurgeStore {
   }
 
   private static func isSystemJunkCacheItem(_ item: CacheItem) -> Bool {
-    isSystemCacheItem(item) || systemJunkAppNames.contains(item.appName)
-  }
-
-  private static func isSystemCacheItem(_ item: CacheItem) -> Bool {
-    item.appName.hasPrefix("System Caches —")
+    systemJunkAppNames.contains(item.appName)
   }
 }
 

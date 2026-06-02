@@ -146,8 +146,19 @@ final class PurgeStore: ObservableObject {
     /// Holds candidates between the primary sheet and the second high-risk alert.
     private var highRiskDeletionStagingCandidates: [DeletionCandidate]?
 
+    private static let maxReasonableLifetimeRecoveredBytes: Int64 = 100_000_000_000
+
+    var hasDisplayableLifetimeStats: Bool {
+        totalRecoveredBytes > 0 && totalRecoveredBytes <= Self.maxReasonableLifetimeRecoveredBytes
+    }
+
     init() {
-        totalRecoveredBytes = Int64(defaults.integer(forKey: StorageKeys.totalRecoveredBytes))
+        var recovered = Int64(defaults.integer(forKey: StorageKeys.totalRecoveredBytes))
+        if recovered > Self.maxReasonableLifetimeRecoveredBytes {
+            recovered = 0
+            defaults.set(0, forKey: StorageKeys.totalRecoveredBytes)
+        }
+        totalRecoveredBytes = recovered
         lastScanCompletedAt = defaults.object(forKey: StorageKeys.lastScanCompletedAt) as? Date
         if defaults.object(forKey: StorageKeys.lastScanSafeRecoverableBytes) != nil {
             lastScanSafeRecoverableBytes = Int64(defaults.integer(forKey: StorageKeys.lastScanSafeRecoverableBytes))
@@ -252,7 +263,7 @@ final class PurgeStore: ObservableObject {
             for location in item.locations {
                 guard daysBetween(location.lastModified, now) >= minUnusedDaysForCaches else { continue }
                 let path = location.path.standardizedFileURL
-                guard !DeletionSafetyPolicy.requiresAdminPrivileges(for: path) else { continue }
+                guard DeletionSafetyPolicy.isOfferedForCleanup(path) else { continue }
                 candidates.append(
                     DeletionCandidate(
                         title: item.appName,
@@ -1336,6 +1347,7 @@ final class PurgeStore: ObservableObject {
 
         items = DefinitionCacheGrouper.group(items)
         items = dedupeCacheItemsByPath(items)
+        items = DeletionSafetyPolicy.filterCacheItems(items)
 
         if animate {
             withAnimation(.easeInOut(duration: 0.2)) {
@@ -1425,11 +1437,12 @@ final class PurgeStore: ObservableObject {
 
         let apply = {
             for tool in tools.values {
-                self.pendingDevToolSizeIDs.insert(tool.id)
-                if let index = self.devTools.firstIndex(where: { $0.id == tool.id }) {
-                    self.devTools[index] = tool
+                guard let offered = DeletionSafetyPolicy.devToolFilteredToOfferedCleanup(tool) else { continue }
+                self.pendingDevToolSizeIDs.insert(offered.id)
+                if let index = self.devTools.firstIndex(where: { $0.id == offered.id }) {
+                    self.devTools[index] = offered
                 } else {
-                    self.devTools.append(tool)
+                    self.devTools.append(offered)
                 }
             }
 
@@ -1449,8 +1462,8 @@ final class PurgeStore: ObservableObject {
                     safetyInfo: tool.safetyInfo,
                     reinstallSafety: tool.reinstallSafety
                 )
-                if updated.isDetected {
-                    self.devTools[index] = updated
+                if let offered = DeletionSafetyPolicy.devToolFilteredToOfferedCleanup(updated), offered.isDetected {
+                    self.devTools[index] = offered
                 } else {
                     self.devTools.remove(at: index)
                 }
@@ -1461,10 +1474,11 @@ final class PurgeStore: ObservableObject {
             }
 
             for simulator in simulators.values {
-                if let index = self.simulatorDevices.firstIndex(where: { $0.id == simulator.id }) {
-                    self.simulatorDevices[index] = simulator
+                guard let offered = DeletionSafetyPolicy.simulatorFilteredToOfferedCleanup(simulator) else { continue }
+                if let index = self.simulatorDevices.firstIndex(where: { $0.id == offered.id }) {
+                    self.simulatorDevices[index] = offered
                 } else {
-                    self.simulatorDevices.append(simulator)
+                    self.simulatorDevices.append(offered)
                 }
             }
 
@@ -1519,14 +1533,15 @@ final class PurgeStore: ObservableObject {
 
         let apply = {
             for group in groups {
-                let paths = group.artifacts.map { $0.path.standardizedFileURL.path }
+                guard let offered = DeletionSafetyPolicy.projectGroupFilteredToOfferedCleanup(group) else { continue }
+                let paths = offered.artifacts.map { $0.path.standardizedFileURL.path }
                 self.pendingProjectArtifactPaths.formUnion(paths.filter { path in
-                    group.artifacts.first { $0.path.standardizedFileURL.path == path }?.sizeBytes == 0
+                    offered.artifacts.first { $0.path.standardizedFileURL.path == path }?.sizeBytes == 0
                 })
-                if let index = self.projectGroups.firstIndex(where: { $0.id == group.id }) {
-                    self.projectGroups[index] = group
+                if let index = self.projectGroups.firstIndex(where: { $0.id == offered.id }) {
+                    self.projectGroups[index] = offered
                 } else {
-                    self.projectGroups.append(group)
+                    self.projectGroups.append(offered)
                 }
             }
             self.projectGroups.sort { $0.totalBytes > $1.totalBytes }
@@ -1746,7 +1761,9 @@ final class PurgeStore: ObservableObject {
 
     private func incrementRecoveredTotal(by bytes: Int64) {
         guard bytes > 0 else { return }
-        totalRecoveredBytes += bytes
+        let updated = totalRecoveredBytes + bytes
+        guard updated <= Self.maxReasonableLifetimeRecoveredBytes else { return }
+        totalRecoveredBytes = updated
         defaults.set(totalRecoveredBytes, forKey: StorageKeys.totalRecoveredBytes)
     }
 
