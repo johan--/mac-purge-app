@@ -1,8 +1,8 @@
 import Foundation
 
 enum LifetimeSizeComparison {
-  private static let bytesPer4KVideoHour: Int64 = 1_500_000_000
-  private static let bytesPerHDVideoHour: Int64 = 500_000_000
+  private static let bytesPer4KVideoHour: Int64 = 10_000_000_000
+  private static let bytesPerHDVideoHour: Int64 = 3_000_000_000
   private static let bytesPerSong: Int64 = 4_000_000
   private static let bytesPerPhoto: Int64 = 5_000_000
 

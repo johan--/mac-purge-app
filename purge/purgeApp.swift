@@ -36,14 +36,14 @@ struct PurgeApp: App {
             PurgeCommands(store: store)
         }
 
-        MenuBarExtra(formatBytes(store.recoverableTotalBytes), systemImage: "externaldrive.badge.minus") {
+        MenuBarExtra(formatBytes(store.safeRecoverableBytes), systemImage: "externaldrive.badge.minus") {
             Button("Open Purge") {
                 NSApp.activate(ignoringOtherApps: true)
                 NSApp.windows.first?.makeKeyAndOrderFront(nil)
             }
             Divider()
             VStack(alignment: .leading, spacing: 2) {
-                Text(formatBytes(store.recoverableTotalBytes))
+                Text("Safe to clean: \(formatBytes(store.safeRecoverableBytes))")
                     .font(.headline)
                 Text("\(formatBytes(store.totalRecoveredBytes)) recovered so far")
                     .font(.caption)
