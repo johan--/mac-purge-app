@@ -31,6 +31,7 @@ enum DeletionSafetyPolicy {
         "/Library/Caches",
         "/Library/Updates",
         "/private/var/log",
+        "/var/log",
         "/private/var/db/DiagnosticPipeline",
         "/Library/Logs/DiagnosticReports"
     ]
@@ -72,9 +73,12 @@ enum DeletionSafetyPolicy {
         [
             "\(home)/Library/Keychains",
             "\(home)/Library/Preferences",
-            "\(home)/Library/Application Support",
             "\(home)/Library/Mail",
             "\(home)/System",
+            "\(home)/Documents",
+            "\(home)/Desktop",
+            "\(home)/Downloads",
+            "\(home)/Pictures",
             "/Library",
             "/usr",
             "/bin",
@@ -88,10 +92,7 @@ enum DeletionSafetyPolicy {
     /// nested below them remain reachable through the whitelist.
     nonisolated static func neverDeleteExactPaths(home: String) -> [String] {
         [
-            "\(home)/Documents",
-            "\(home)/Desktop",
-            "\(home)/Downloads",
-            "\(home)/Pictures",
+            "\(home)/Library/Application Support",
             "\(home)/Music",
             "\(home)/Movies"
         ]

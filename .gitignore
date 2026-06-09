@@ -1,3 +1,4 @@
 Secrets.xcconfig
 *.xcconfig
 node_modules/
+xcuserdata/

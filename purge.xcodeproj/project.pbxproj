@@ -10,11 +10,22 @@
 		5AB9306A2FAF6F5400EB0EBD /* purge.icon in Resources */ = {isa = PBXBuildFile; fileRef = 5AB930692FAF6F5400EB0EBD /* purge.icon */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		5AF381062FAA15E4001693A0 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5AF3803D2FAA15E4001693A0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5AF380442FAA15E4001693A0;
+			remoteInfo = purge;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		5AB930692FAF6F5400EB0EBD /* purge.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = purge.icon; sourceTree = "<group>"; };
 		5AF380452FAA15E4001693A0 /* purge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = purge.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5AF380532FAA15E7001693A0 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		5AF380542FAA15E8001693A0 /* AirtableTelemetryInfo.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = AirtableTelemetryInfo.plist; sourceTree = "<group>"; };
+		5AF381002FAA15E4001693A0 /* PurgeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PurgeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -23,10 +34,22 @@
 			path = purge;
 			sourceTree = "<group>";
 		};
+		5AF381012FAA15E4001693A0 /* PurgeTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = PurgeTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		5AF380422FAA15E4001693A0 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5AF381042FAA15E4001693A0 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -43,6 +66,7 @@
 				5AF380532FAA15E7001693A0 /* Secrets.xcconfig */,
 				5AB930692FAF6F5400EB0EBD /* purge.icon */,
 				5AF380472FAA15E4001693A0 /* purge */,
+				5AF381012FAA15E4001693A0 /* PurgeTests */,
 				5AF380462FAA15E4001693A0 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -51,6 +75,7 @@
 			isa = PBXGroup;
 			children = (
 				5AF380452FAA15E4001693A0 /* purge.app */,
+				5AF381002FAA15E4001693A0 /* PurgeTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -81,6 +106,28 @@
 			productReference = 5AF380452FAA15E4001693A0 /* purge.app */;
 			productType = "com.apple.product-type.application";
 		};
+		5AF381022FAA15E4001693A0 /* PurgeTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5AF381092FAA15E6001693A0 /* Build configuration list for PBXNativeTarget "PurgeTests" */;
+			buildPhases = (
+				5AF381032FAA15E4001693A0 /* Sources */,
+				5AF381042FAA15E4001693A0 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5AF381052FAA15E4001693A0 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				5AF381012FAA15E4001693A0 /* PurgeTests */,
+			);
+			name = PurgeTests;
+			packageProductDependencies = (
+			);
+			productName = PurgeTests;
+			productReference = 5AF381002FAA15E4001693A0 /* PurgeTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -93,6 +140,10 @@
 				TargetAttributes = {
 					5AF380442FAA15E4001693A0 = {
 						CreatedOnToolsVersion = 26.2;
+					};
+					5AF381022FAA15E4001693A0 = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = 5AF380442FAA15E4001693A0;
 					};
 				};
 			};
@@ -111,6 +162,7 @@
 			projectRoot = "";
 			targets = (
 				5AF380442FAA15E4001693A0 /* purge */,
+				5AF381022FAA15E4001693A0 /* PurgeTests */,
 			);
 		};
 /* End PBXProject section */
@@ -155,7 +207,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5AF381032FAA15E4001693A0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		5AF381052FAA15E4001693A0 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5AF380442FAA15E4001693A0 /* purge */;
+			targetProxy = 5AF381062FAA15E4001693A0 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		5AF3804E2FAA15E6001693A0 /* Debug */ = {
@@ -354,6 +421,58 @@
 			};
 			name = Release;
 		};
+		5AF381072FAA15E6001693A0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = BX83ZBV95B;
+				ENABLE_TESTING_SEARCH_PATHS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.getpurge.app.PurgeTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/purge.app/Contents/MacOS/purge";
+			};
+			name = Debug;
+		};
+		5AF381082FAA15E6001693A0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = BX83ZBV95B;
+				ENABLE_TESTING_SEARCH_PATHS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.getpurge.app.PurgeTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/purge.app/Contents/MacOS/purge";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -371,6 +490,15 @@
 			buildConfigurations = (
 				5AF380512FAA15E6001693A0 /* Debug */,
 				5AF380522FAA15E6001693A0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5AF381092FAA15E6001693A0 /* Build configuration list for PBXNativeTarget "PurgeTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5AF381072FAA15E6001693A0 /* Debug */,
+				5AF381082FAA15E6001693A0 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
