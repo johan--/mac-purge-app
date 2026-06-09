@@ -9,18 +9,13 @@ struct OnboardingSizeComparisonItem: Identifiable, Equatable {
 
 enum OnboardingSizeComparison {
   private static let oneMegabyte: Int64 = 1024 * 1024
-  private static let oneGigabyte: Int64 = 1024 * 1024 * 1024
-  private static let bytesPerPhoto = oneMegabyte
-  private static let bytesPerSong: Int64 = 4 * oneMegabyte
-  private static let bytesPerVideoHour: Int64 = 5 * oneGigabyte
-  private static let bytesPerPDF: Int64 = 500 * 1024
 
   static func items(for bytes: Int64) -> [OnboardingSizeComparisonItem]? {
     guard bytes >= oneMegabyte else { return nil }
 
     var comparisons: [OnboardingSizeComparisonItem] = []
 
-    let photoCount = roundedCount(bytes, perUnit: bytesPerPhoto)
+    let photoCount = roundedCount(bytes, perUnit: MediaSizeReference.bytesPerPhoto)
     if photoCount >= 100 {
       comparisons.append(
         OnboardingSizeComparisonItem(
@@ -30,7 +25,7 @@ enum OnboardingSizeComparison {
       )
     }
 
-    let songCount = roundedCount(bytes, perUnit: bytesPerSong)
+    let songCount = roundedCount(bytes, perUnit: MediaSizeReference.bytesPerSong)
     if songCount >= 100 {
       comparisons.append(
         OnboardingSizeComparisonItem(
@@ -41,7 +36,7 @@ enum OnboardingSizeComparison {
     }
 
     if comparisons.count < 2 {
-      let videoHours = roundedCount(bytes, perUnit: bytesPerVideoHour)
+      let videoHours = roundedCount(bytes, perUnit: MediaSizeReference.bytesPerHDVideoHour)
       if videoHours >= 1 {
         let hoursLabel = videoHours == 1 ? "hour of HD video" : "hours of HD video"
         comparisons.append(
@@ -54,7 +49,7 @@ enum OnboardingSizeComparison {
     }
 
     if comparisons.count < 2 {
-      let pdfCount = roundedCount(bytes, perUnit: bytesPerPDF)
+      let pdfCount = roundedCount(bytes, perUnit: MediaSizeReference.bytesPerPDF)
       if pdfCount >= 1 {
         comparisons.append(
           OnboardingSizeComparisonItem(

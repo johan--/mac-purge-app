@@ -1,16 +1,11 @@
 import Foundation
 
 enum LifetimeSizeComparison {
-  private static let bytesPer4KVideoHour: Int64 = 10_000_000_000
-  private static let bytesPerHDVideoHour: Int64 = 3_000_000_000
-  private static let bytesPerSong: Int64 = 4_000_000
-  private static let bytesPerPhoto: Int64 = 5_000_000
-
   static func item(for bytes: Int64) -> OnboardingSizeComparisonItem? {
     guard bytes > 0 else { return nil }
 
-    if bytes >= bytesPer4KVideoHour {
-      let hours = roundedCount(bytes, perUnit: bytesPer4KVideoHour)
+    if bytes >= MediaSizeReference.bytesPer4KVideoHour {
+      let hours = roundedCount(bytes, perUnit: MediaSizeReference.bytesPer4KVideoHour)
       let hoursLabel = hours == 1 ? "hour of 4K video" : "hours of 4K video"
       return OnboardingSizeComparisonItem(
         symbol: "film.fill",
@@ -18,8 +13,8 @@ enum LifetimeSizeComparison {
       )
     }
 
-    if bytes >= bytesPerHDVideoHour {
-      let hours = roundedCount(bytes, perUnit: bytesPerHDVideoHour)
+    if bytes >= MediaSizeReference.bytesPerHDVideoHour {
+      let hours = roundedCount(bytes, perUnit: MediaSizeReference.bytesPerHDVideoHour)
       let hoursLabel = hours == 1 ? "hour of HD video" : "hours of HD video"
       return OnboardingSizeComparisonItem(
         symbol: "film",
@@ -27,8 +22,8 @@ enum LifetimeSizeComparison {
       )
     }
 
-    if bytes >= bytesPerSong {
-      let songCount = max(1, roundedCount(bytes, perUnit: bytesPerSong))
+    if bytes >= MediaSizeReference.bytesPerSong {
+      let songCount = max(1, roundedCount(bytes, perUnit: MediaSizeReference.bytesPerSong))
       let songLabel = songCount == 1 ? "song" : "songs"
       return OnboardingSizeComparisonItem(
         symbol: "music.note",
@@ -36,7 +31,7 @@ enum LifetimeSizeComparison {
       )
     }
 
-    let photoCount = max(1, roundedCount(bytes, perUnit: bytesPerPhoto))
+    let photoCount = max(1, roundedCount(bytes, perUnit: MediaSizeReference.bytesPerPhoto))
     let photoLabel = photoCount == 1 ? "photo" : "photos"
     return OnboardingSizeComparisonItem(
       symbol: "photo.fill",
