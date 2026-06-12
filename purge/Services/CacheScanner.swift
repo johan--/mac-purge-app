@@ -65,7 +65,9 @@ final class CacheScanner {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let cachesURL = home.appendingPathComponent("Library/Caches", isDirectory: true)
         var sizeJobs: [SizeJob] = []
-        var collectedPaths = Set<String>()
+        // Seed with paths the Dev Tools scan owns so they are skipped here instead of
+        // appearing under App Caches and later being pulled out when the dev scan runs.
+        var collectedPaths = DevScanner.claimedGlobalCachePaths()
         let hasFullDiskAccess = PermissionChecker().hasFullDiskAccess()
 
         continuation.yield(.status("Scanning App Caches..."))

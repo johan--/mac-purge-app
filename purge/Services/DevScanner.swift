@@ -517,7 +517,14 @@ final class DevScanner {
 
     // MARK: - Global dev tool caches
 
-    private func globalCacheDefinitions() -> [(label: String, paths: [URL])] {
+    /// Standardized paths owned by the Dev Tools scan. The general cache scan skips
+    /// these up front so they don't surface under App Caches and then get removed
+    /// once the dev scan claims them.
+    nonisolated static func claimedGlobalCachePaths() -> Set<String> {
+        Set(globalCacheDefinitions().flatMap(\.paths).map { $0.standardizedFileURL.path })
+    }
+
+    private nonisolated static func globalCacheDefinitions() -> [(label: String, paths: [URL])] {
         let home = FileManager.default.homeDirectoryForCurrentUser
 
         return [
@@ -630,7 +637,7 @@ final class DevScanner {
 
     private func scanGlobalCachePlaceholders() -> ([DevTool], [DevToolSizeJob]) {
         let home = FileManager.default.homeDirectoryForCurrentUser
-        let staticDefinitions = globalCacheDefinitions() + discoverObsoleteEditorExtensionDefinitions(home: home)
+        let staticDefinitions = Self.globalCacheDefinitions() + discoverObsoleteEditorExtensionDefinitions(home: home)
 
         let built = staticDefinitions.compactMap { entry -> DevTool? in
             let label = entry.label
@@ -738,7 +745,7 @@ final class DevScanner {
 
     private func scanGlobalCaches() -> [DevTool] {
         let home = FileManager.default.homeDirectoryForCurrentUser
-        let mapped = globalCacheDefinitions() + discoverObsoleteEditorExtensionDefinitions(home: home)
+        let mapped = Self.globalCacheDefinitions() + discoverObsoleteEditorExtensionDefinitions(home: home)
 
         let built = mapped.map { entry -> DevTool in
             let label = entry.label

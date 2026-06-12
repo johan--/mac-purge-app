@@ -140,6 +140,14 @@ final class PurgeStore: ObservableObject {
     /// Cancels stale async simulator sizing when a new dev scan starts.
     private var simulatorSizingGeneration = 0
     private var scanGeneration = 0
+    /// All cache items discovered so far in the current scan, including rows whose
+    /// sizes are still unresolved. Only rows with a resolved non-zero size are
+    /// published to `cacheItems`, so visible sections grow monotonically during a scan.
+    private var stagedGeneralCacheItems: [CacheItem] = []
+    /// Dev tools discovered but not yet sized; published to `devTools` once their size resolves.
+    private var stagedDevToolsByID: [String: DevTool] = [:]
+    /// Simulators discovered but not yet sized; published once their size resolves.
+    private var stagedSimulatorsByID: [UUID: SimulatorDevice] = [:]
     private var scanTask: Task<Void, Never>?
     private var projectDiscoveryTask: Task<Void, Never>?
     private var scanCompletionHideTask: Task<Void, Never>?
@@ -585,6 +593,15 @@ final class PurgeStore: ObservableObject {
     private func reflectDeletionReportInScanState(_ report: DeletionReport) {
         let deletedPaths = Set(report.deletedItems.map { URL(fileURLWithPath: $0.path).standardizedFileURL.path })
         guard !deletedPaths.isEmpty else { return }
+
+        stagedGeneralCacheItems = stagedGeneralCacheItems.compactMap { item in
+            let remaining = item.locations.filter {
+                !deletedPaths.contains($0.path.standardizedFileURL.path)
+            }
+            guard !remaining.isEmpty else { return nil }
+            guard remaining.count != item.locations.count else { return item }
+            return item.withLocations(remaining)
+        }
 
         withAnimation(.easeInOut(duration: 0.2)) {
             cacheItems = cacheItems.compactMap { item in
@@ -1328,6 +1345,7 @@ final class PurgeStore: ObservableObject {
     private func clearGeneralScanState() {
         pendingCacheSizePaths = []
         cacheItems = []
+        stagedGeneralCacheItems = []
         isEnrichingGeneral = false
     }
 
@@ -1338,7 +1356,9 @@ final class PurgeStore: ObservableObject {
         pendingDevToolSizeIDs = []
         pendingProjectArtifactPaths = []
         devTools = []
+        stagedDevToolsByID = [:]
         simulatorDevices = []
+        stagedSimulatorsByID = [:]
         projectGroups = []
         devToolRepoStatusByPath = [:]
         isEnrichingDeveloper = false
@@ -1473,7 +1493,7 @@ final class PurgeStore: ObservableObject {
     ) {
         guard !found.isEmpty || !sizes.isEmpty else { return }
 
-        var items = cacheItems
+        var items = stagedGeneralCacheItems
         if !found.isEmpty {
             items.append(contentsOf: found)
             for item in found {
@@ -1492,15 +1512,38 @@ final class PurgeStore: ObservableObject {
         items = DefinitionCacheGrouper.group(items)
         items = dedupeCacheItemsByPath(items)
         items = DeletionSafetyPolicy.filterCacheItems(items)
+        stagedGeneralCacheItems = items
 
+        let published = publishedCacheItems(from: items)
         if animate {
             withAnimation(.easeInOut(duration: 0.2)) {
-                cacheItems = items
+                cacheItems = published
                 reconcileCrossTabCacheDuplicates()
             }
         } else {
-            cacheItems = items
+            cacheItems = published
             reconcileCrossTabCacheDuplicates()
+        }
+    }
+
+    /// Projects staged scan results into the published list. Rows surface only once
+    /// at least one location has a resolved non-zero size, so they never appear and
+    /// then vanish. A row's safety level (and any mid-scan user override or selection)
+    /// is pinned to what was already published, so rows never switch sections mid-scan.
+    private func publishedCacheItems(from staged: [CacheItem]) -> [CacheItem] {
+        let previousByID = Dictionary(cacheItems.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return staged.compactMap { item in
+            let sized = item.locations.filter { $0.sizeBytes > 0 }
+            guard !sized.isEmpty else { return nil }
+            var published = sized.count == item.locations.count ? item : item.withLocations(sized)
+            if let previous = previousByID[published.id] {
+                published.isSelected = previous.isSelected
+                if previous.safetyInfo.level != published.safetyInfo.level {
+                    published.safetyInfo = previous.safetyInfo
+                    published.appName = previous.appName
+                }
+            }
+            return published
         }
     }
 
@@ -1580,20 +1623,18 @@ final class PurgeStore: ObservableObject {
         }
 
         let apply = {
+            // Discovered tools are staged until their size resolves, so the visible
+            // list only ever gains rows during a scan and never loses them.
             for tool in tools.values {
                 guard let offered = DeletionSafetyPolicy.devToolFilteredToOfferedCleanup(tool) else { continue }
                 self.pendingDevToolSizeIDs.insert(offered.id)
-                if let index = self.devTools.firstIndex(where: { $0.id == offered.id }) {
-                    self.devTools[index] = offered
-                } else {
-                    self.devTools.append(offered)
-                }
+                self.stagedDevToolsByID[offered.id] = offered
             }
 
             for (id, update) in toolSizes {
                 self.pendingDevToolSizeIDs.remove(id)
-                guard let index = self.devTools.firstIndex(where: { $0.id == id }) else { continue }
-                let tool = self.devTools[index]
+                guard let tool = self.stagedDevToolsByID.removeValue(forKey: id)
+                        ?? self.devTools.first(where: { $0.id == id }) else { continue }
                 let updated = DevTool(
                     definitionKey: tool.definitionKey,
                     toolName: tool.toolName,
@@ -1606,10 +1647,15 @@ final class PurgeStore: ObservableObject {
                     safetyInfo: tool.safetyInfo,
                     reinstallSafety: tool.reinstallSafety
                 )
+                let existingIndex = self.devTools.firstIndex(where: { $0.id == id })
                 if let offered = DeletionSafetyPolicy.devToolFilteredToOfferedCleanup(updated), offered.isDetected {
-                    self.devTools[index] = offered
-                } else {
-                    self.devTools.remove(at: index)
+                    if let existingIndex {
+                        self.devTools[existingIndex] = offered
+                    } else {
+                        self.devTools.append(offered)
+                    }
+                } else if let existingIndex {
+                    self.devTools.remove(at: existingIndex)
                 }
             }
 
@@ -1619,19 +1665,24 @@ final class PurgeStore: ObservableObject {
 
             for simulator in simulators.values {
                 guard let offered = DeletionSafetyPolicy.simulatorFilteredToOfferedCleanup(simulator) else { continue }
-                if let index = self.simulatorDevices.firstIndex(where: { $0.id == offered.id }) {
-                    self.simulatorDevices[index] = offered
-                } else {
-                    self.simulatorDevices.append(offered)
-                }
+                self.stagedSimulatorsByID[offered.id] = offered
             }
 
             for (id, sizeBytes) in simulatorSizes {
-                guard let index = self.simulatorDevices.firstIndex(where: { $0.id == id }) else { continue }
-                if sizeBytes > 0 {
-                    self.simulatorDevices[index].sizeOnDisk = sizeBytes
-                } else {
-                    self.simulatorDevices.remove(at: index)
+                if var staged = self.stagedSimulatorsByID.removeValue(forKey: id) {
+                    guard sizeBytes > 0 else { continue }
+                    staged.sizeOnDisk = sizeBytes
+                    if let index = self.simulatorDevices.firstIndex(where: { $0.id == id }) {
+                        self.simulatorDevices[index] = staged
+                    } else {
+                        self.simulatorDevices.append(staged)
+                    }
+                } else if let index = self.simulatorDevices.firstIndex(where: { $0.id == id }) {
+                    if sizeBytes > 0 {
+                        self.simulatorDevices[index].sizeOnDisk = sizeBytes
+                    } else {
+                        self.simulatorDevices.remove(at: index)
+                    }
                 }
             }
 
@@ -1715,14 +1766,19 @@ final class PurgeStore: ObservableObject {
         )
         guard !devPaths.isEmpty else { return }
 
-        cacheItems = cacheItems.compactMap { item in
-            let remaining = item.locations.filter {
-                !devPaths.contains($0.path.standardizedFileURL.path)
+        func pruned(_ items: [CacheItem]) -> [CacheItem] {
+            items.compactMap { item in
+                let remaining = item.locations.filter {
+                    !devPaths.contains($0.path.standardizedFileURL.path)
+                }
+                guard !remaining.isEmpty else { return nil }
+                guard remaining.count != item.locations.count else { return item }
+                return item.withLocations(remaining)
             }
-            guard !remaining.isEmpty else { return nil }
-            guard remaining.count != item.locations.count else { return item }
-            return item.withLocations(remaining)
         }
+
+        stagedGeneralCacheItems = pruned(stagedGeneralCacheItems)
+        cacheItems = pruned(cacheItems)
     }
 
     private func resolvedAutomaticSafety(for item: CacheItem) -> SafetyInfo {
