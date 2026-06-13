@@ -570,7 +570,7 @@ final class PurgeStore: ObservableObject {
             session?.completeRun(
                 bytesFreed: report.totalDeleted,
                 elapsedSeconds: elapsedSeconds,
-                failedCount: report.userVisibleFailureCount,
+                failedItems: report.userVisibleFailures,
                 movedToTrashCount: report.movedToTrashCount
             )
             CleanupHistoryStore.shared.append(trigger: trigger, report: report)
@@ -586,6 +586,41 @@ final class PurgeStore: ObservableObject {
 
     func dismissManualDeletionSession() {
         manualDeletionSession = nil
+    }
+
+    /// Retries deletion for a single failed item from the completion overlay.
+    func retryCleanFailure(_ item: CleanFailureItem, session: DeletionSession) async -> Int64? {
+        let url = URL(fileURLWithPath: item.path)
+        let result = await fileDeleter.retryDeleteItem(
+            at: url,
+            displayName: item.displayName,
+            expectedSizeBytes: item.sizeBytes
+        )
+        switch result {
+        case .success(let freedBytes):
+            session.removeResolvedFailure(id: item.id, additionalFreedBytes: freedBytes)
+            incrementRecoveredTotal(by: freedBytes)
+            let deleted = DeletedItem(
+                path: item.path,
+                sizeBytes: freedBytes,
+                displayName: item.displayName
+            )
+            reflectDeletionReportInScanState(
+                DeletionReport(
+                    totalDeleted: freedBytes,
+                    deletedItems: [deleted],
+                    failedItems: [],
+                    skippedItems: [],
+                    volumeCapacity: 0,
+                    availableCapacityBefore: 0,
+                    availableCapacityAfter: 0,
+                    timestamp: Date()
+                )
+            )
+            return freedBytes
+        case .failure:
+            return nil
+        }
     }
 
     /// Updates in-memory scan results so removed folders disappear without requiring a full rescan
@@ -1059,7 +1094,9 @@ final class PurgeStore: ObservableObject {
         /// Real engine time for the deletion run, in seconds.
         var elapsedSeconds: Double = 0
         var movedToTrashCount: Int = 0
-        var failedCount: Int = 0
+        var failedItems: [CleanFailureItem] = []
+
+        var failedCount: Int { failedItems.count }
     }
 
     @discardableResult
@@ -1173,7 +1210,7 @@ final class PurgeStore: ObservableObject {
             liveSession.completeRun(
                 bytesFreed: summary.freedBytes,
                 elapsedSeconds: summary.elapsedSeconds,
-                failedCount: summary.failedCount,
+                failedItems: summary.failedItems,
                 movedToTrashCount: summary.movedToTrashCount
             )
         } else {
@@ -1184,7 +1221,7 @@ final class PurgeStore: ObservableObject {
                 freedBytes: summary.freedBytes,
                 elapsedSeconds: elapsedSeconds,
                 movedToTrashCount: summary.movedToTrashCount,
-                failedCount: summary.failedCount,
+                failedItems: summary.failedItems,
                 startedAt: interactiveCleanupStartedAt
             )
         }
@@ -1311,7 +1348,7 @@ final class PurgeStore: ObservableObject {
                 freedBytes: freedBytes,
                 elapsedSeconds: elapsedSeconds,
                 movedToTrashCount: report.movedToTrashCount,
-                failedCount: report.userVisibleFailureCount
+                failedItems: report.userVisibleFailures
             )
         } catch {
             if scheduledNotifications {

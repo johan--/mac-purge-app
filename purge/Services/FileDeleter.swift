@@ -21,16 +21,33 @@ struct DeletedItem: Identifiable {
 struct FailedDeletionItem: Identifiable {
     let id = UUID()
     let path: String
-    let reason: String
+    let displayName: String
+    let reason: CleanFailureReason
+    let sizeBytes: Int64
+
+    init(path: String, displayName: String?, reason: CleanFailureReason, sizeBytes: Int64 = 0) {
+        self.path = path
+        self.displayName = displayName ?? URL(fileURLWithPath: path).lastPathComponent
+        self.reason = reason
+        self.sizeBytes = sizeBytes
+    }
 }
 
 struct SkippedDeletionItem: Identifiable, Hashable {
     let id = UUID()
     let path: String
+    let displayName: String
     let reason: String
     /// `true` when the user should see a "skipped for safety" notice.
     /// `false` for silent never-delete blocks.
     let isUserVisible: Bool
+
+    init(path: String, displayName: String?, reason: String, isUserVisible: Bool) {
+        self.path = path
+        self.displayName = displayName ?? URL(fileURLWithPath: path).lastPathComponent
+        self.reason = reason
+        self.isUserVisible = isUserVisible
+    }
 }
 
 struct DeletionReport: Identifiable {
@@ -111,8 +128,9 @@ final class FileDeleter {
                                 recordDeletionFailure(
                                     path: contentURL.path,
                                     error: error,
-                                    failedItems: &failedItems,
-                                    skippedItems: &skippedItems
+                                    displayName: contentURL.lastPathComponent,
+                                    sizeBytes: 0,
+                                    failedItems: &failedItems
                                 )
                             }
                         }
@@ -138,9 +156,14 @@ final class FileDeleter {
                             movedToTrash: false
                         ))
                         onProgress?(.itemDeleted(sizeBytes: size))
-                    case .failure(let message):
-                        NSLog("Purge: failed to delete simulator %@ — %@", url.path, message)
-                        failedItems.append(FailedDeletionItem(path: url.path, reason: message))
+                    case .failure:
+                        NSLog("Purge: failed to delete simulator %@ — %@", url.path, udid)
+                        failedItems.append(FailedDeletionItem(
+                            path: url.path,
+                            displayName: friendlyTitle,
+                            reason: .unknown,
+                            sizeBytes: size
+                        ))
                     }
                 } else {
                     do {
@@ -152,8 +175,9 @@ final class FileDeleter {
                         recordDeletionFailure(
                             path: url.path,
                             error: error,
-                            failedItems: &failedItems,
-                            skippedItems: &skippedItems
+                            displayName: friendlyTitle,
+                            sizeBytes: size,
+                            failedItems: &failedItems
                         )
                     }
                 }
@@ -163,6 +187,7 @@ final class FileDeleter {
                 skippedItems.append(
                     SkippedDeletionItem(
                         path: url.path,
+                        displayName: friendlyTitle,
                         reason: reason,
                         isUserVisible: decision.isUserVisibleSkip
                     )
@@ -226,35 +251,51 @@ final class FileDeleter {
         return .failure("simctl delete failed (exit \(process.terminationStatus))")
     }
 
+    /// Retries deletion for a single previously failed item.
+    func retryDeleteItem(
+        at url: URL,
+        displayName: String?,
+        expectedSizeBytes: Int64
+    ) async -> Result<Int64, CleanFailureReason> {
+        let report: DeletionReport
+        do {
+            let key = url.standardizedFileURL.path
+            report = try await deleteItems(
+                at: [url],
+                pathToDisplayName: [key: displayName ?? url.lastPathComponent],
+                pathToExpectedSizeBytes: [key: expectedSizeBytes]
+            )
+        } catch {
+            return .failure(.unknown)
+        }
+
+        if report.deletedItems.isEmpty {
+            if let failed = report.failedItems.first {
+                return .failure(failed.reason)
+            }
+            return .failure(.unknown)
+        }
+        return .success(report.totalDeleted)
+    }
+
     private func recordDeletionFailure(
         path: String,
         error: Error,
-        failedItems: inout [FailedDeletionItem],
-        skippedItems: inout [SkippedDeletionItem]
+        displayName: String?,
+        sizeBytes: Int64,
+        failedItems: inout [FailedDeletionItem]
     ) {
+        guard let reason = CleanFailureReason.from(error: error) else {
+            NSLog("Purge: item already gone, skipping %@", path)
+            return
+        }
         NSLog("Purge: failed to delete %@ — %@", path, error.localizedDescription)
-        if Self.isPermissionDenied(error) {
-            skippedItems.append(
-                SkippedDeletionItem(
-                    path: path,
-                    reason: "Protected by macOS — cannot be removed.",
-                    isUserVisible: true
-                )
-            )
-        } else {
-            failedItems.append(FailedDeletionItem(path: path, reason: error.localizedDescription))
-        }
-    }
-
-    private static func isPermissionDenied(_ error: Error) -> Bool {
-        let ns = error as NSError
-        if ns.domain == NSCocoaErrorDomain {
-            return ns.code == NSFileWriteNoPermissionError || ns.code == NSFileReadNoPermissionError
-        }
-        if ns.domain == NSPOSIXErrorDomain {
-            return ns.code == Int(EACCES) || ns.code == Int(EPERM)
-        }
-        return false
+        failedItems.append(FailedDeletionItem(
+            path: path,
+            displayName: displayName,
+            reason: reason,
+            sizeBytes: sizeBytes
+        ))
     }
 
     private func volumeCapacitySnapshot(for url: URL) -> (total: Int64, available: Int64) {

@@ -70,6 +70,7 @@ final class DeletionSession: ObservableObject, Identifiable {
     private(set) var elapsedSeconds: Double = 0
     private(set) var failedCount: Int = 0
     private(set) var movedToTrashCount: Int = 0
+    @Published private(set) var failedItems: [CleanFailureItem] = []
 
     init(totalBytes: Int64, totalItems: Int, startedAt: Date = Date()) {
         self.totalBytes = totalBytes
@@ -91,14 +92,15 @@ final class DeletionSession: ObservableObject, Identifiable {
         freedBytes: Int64,
         elapsedSeconds: Double,
         movedToTrashCount: Int,
-        failedCount: Int,
+        failedItems: [CleanFailureItem],
         startedAt: Date? = nil
     ) -> DeletionSession {
         let session = DeletionSession(freedBytes: freedBytes, startedAt: startedAt)
         session.finalBytesFreed = freedBytes
         session.elapsedSeconds = elapsedSeconds
         session.movedToTrashCount = movedToTrashCount
-        session.failedCount = failedCount
+        session.failedItems = failedItems
+        session.failedCount = failedItems.count
         return session
     }
 
@@ -112,7 +114,7 @@ final class DeletionSession: ObservableObject, Identifiable {
     func completeRun(
         bytesFreed finalBytes: Int64,
         elapsedSeconds engineElapsed: Double,
-        failedCount: Int,
+        failedItems: [CleanFailureItem],
         movedToTrashCount: Int
     ) {
         guard phase == .cleaning else { return }
@@ -122,8 +124,15 @@ final class DeletionSession: ObservableObject, Identifiable {
         } else {
             elapsedSeconds = engineElapsed
         }
-        self.failedCount = failedCount
+        self.failedItems = failedItems
+        self.failedCount = failedItems.count
         self.movedToTrashCount = movedToTrashCount
         phase = .complete
+    }
+
+    func removeResolvedFailure(id: UUID, additionalFreedBytes: Int64) {
+        failedItems.removeAll { $0.id == id }
+        failedCount = failedItems.count
+        finalBytesFreed += additionalFreedBytes
     }
 }

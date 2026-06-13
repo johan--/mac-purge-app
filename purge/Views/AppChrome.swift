@@ -316,6 +316,7 @@ struct SafeCleanupCelebrationOverlay: View {
     @ObservedObject var session: DeletionSession
     let onDone: () -> Void
 
+    @EnvironmentObject private var store: PurgeStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var checkmarkProgress: CGFloat = 0
     @State private var checkmarkScale: CGFloat
@@ -331,6 +332,9 @@ struct SafeCleanupCelebrationOverlay: View {
     @State private var appearedAt = Date()
     @State private var didBeginCompletion = false
     @State private var sequenceTask: Task<Void, Never>?
+    @State private var failuresExpanded = false
+    @State private var retryingFailureIDs: Set<UUID> = []
+    @State private var boltFlashToken = 0
 
     private static let confettiThresholdBytes: Int64 = 2 * 1024 * 1024 * 1024
     private static let minimumCleaningDwell: TimeInterval = 1.2
@@ -358,6 +362,9 @@ struct SafeCleanupCelebrationOverlay: View {
         _displayedBytes = State(initialValue: mountsComplete ? session.finalBytesFreed : 0)
         _displayedFraction = State(initialValue: mountsComplete ? 1 : 0)
         _tagline = State(initialValue: mountsComplete ? TimeTagline.select(for: session.elapsedSeconds) : nil)
+        _boltFlashToken = State(
+            initialValue: mountsComplete && session.elapsedSeconds < 3 ? 1 : 0
+        )
     }
 
     var body: some View {
@@ -405,12 +412,13 @@ struct SafeCleanupCelebrationOverlay: View {
                                     .foregroundStyle(.white.opacity(0.78))
                             }
 
-                            Text(tagline?.line ?? "")
-                                .font(.body)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                                .fixedSize(horizontal: false, vertical: true)
+                            if tagline != nil {
+                                CompletionTimeTagline(
+                                    elapsedSeconds: session.elapsedSeconds,
+                                    boltFlashToken: boltFlashToken
+                                )
                                 .padding(.top, AppStyle.Spacing.xSmall)
+                            }
                         }
                         .opacity(completionLinesVisible ? 1 : 0)
 
@@ -425,10 +433,13 @@ struct SafeCleanupCelebrationOverlay: View {
 
                 VStack(spacing: AppStyle.Spacing.small) {
                     if session.phase == .complete, session.failedCount > 0 {
-                        Text(failedItemsText)
-                            .font(.callout)
-                            .foregroundStyle(.white.opacity(0.6))
-                            .multilineTextAlignment(.center)
+                        CleanFailureDisclosure(
+                            failures: session.failedItems,
+                            isExpanded: $failuresExpanded,
+                            retryingIDs: retryingFailureIDs,
+                            onOpenSettings: openFullDiskAccessSettings,
+                            onRetry: retryFailure
+                        )
                     }
 
                     if reservesTrashDisclaimerSpace {
@@ -436,7 +447,7 @@ struct SafeCleanupCelebrationOverlay: View {
                             Image(systemName: "trash")
                             Text("Empty your Trash to reclaim this space.")
                         }
-                        .font(.caption)
+                        .font(.system(.body, design: .rounded, weight: .medium))
                         .foregroundStyle(.tertiary)
                         .multilineTextAlignment(.center)
                     }
@@ -487,7 +498,7 @@ struct SafeCleanupCelebrationOverlay: View {
             .frame(height: 4)
 
             Text(currentItemText)
-                .font(.caption)
+                .font(.system(.body, design: .rounded, weight: .medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -504,10 +515,21 @@ struct SafeCleanupCelebrationOverlay: View {
         session.currentItemName.map { "Cleaning \($0)…" } ?? "Cleaning…"
     }
 
-    private var failedItemsText: String {
-        session.failedCount == 1
-            ? "1 item couldn't be cleaned"
-            : "\(session.failedCount) items couldn't be cleaned"
+    private func retryFailure(_ item: CleanFailureItem) {
+        guard !retryingFailureIDs.contains(item.id) else { return }
+        retryingFailureIDs.insert(item.id)
+        Task {
+            let freedBytes = await store.retryCleanFailure(item, session: session)
+            retryingFailureIDs.remove(item.id)
+            guard let freedBytes else { return }
+            if reduceMotion {
+                displayedBytes += freedBytes
+            } else {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    displayedBytes += freedBytes
+                }
+            }
+        }
     }
 
     /// Shown in the complete phase only when something actually went to Trash.
@@ -587,6 +609,9 @@ struct SafeCleanupCelebrationOverlay: View {
                     completionLinesVisible = true
                     footerVisible = true
                 }
+                if session.elapsedSeconds < 3 {
+                    boltFlashToken += 1
+                }
                 return
             }
 
@@ -625,11 +650,283 @@ struct SafeCleanupCelebrationOverlay: View {
             withAnimation(.easeInOut(duration: 0.3)) {
                 completionLinesVisible = true
             }
+            if session.elapsedSeconds < 3 {
+                boltFlashToken += 1
+            }
             try? await Task.sleep(nanoseconds: 150_000_000)
             withAnimation(.easeInOut(duration: 0.3)) {
                 footerVisible = true
             }
         }
+    }
+}
+
+private enum CompletionCelebrationAccent {
+    static let timeHighlight = Color(red: 1, green: 0.78, blue: 0.05)
+}
+
+private struct CompletionTimeTagline: View {
+    let elapsedSeconds: Double
+    let boltFlashToken: Int
+
+    private var isFastClean: Bool {
+        elapsedSeconds < 3
+    }
+
+    private var timeText: String {
+        TimeTagline.timeText(for: elapsedSeconds)
+    }
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if isFastClean {
+                CompletionBoltAnchor(flashToken: boltFlashToken)
+            } else {
+                Image(systemName: "clock")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+
+            HStack(spacing: 0) {
+                Text("done in ")
+                    .fontWeight(.regular)
+                    .foregroundStyle(.secondary)
+                Text(timeText)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white.opacity(0.72))
+            }
+            .font(.system(.body, design: .rounded, weight: .medium))
+            .lineLimit(1)
+            .truncationMode(.tail)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .multilineTextAlignment(.center)
+    }
+}
+
+private struct CompletionBoltAnchor: View {
+    let flashToken: Int
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isEnergized = false
+    @State private var lastSeenToken = 0
+    @State private var echoGeneration = 0
+    @State private var chargeTask: Task<Void, Never>?
+
+    private static let flashColor = CompletionCelebrationAccent.timeHighlight
+    private static let chargeSpring = Animation.spring(response: 0.58, dampingFraction: 0.62)
+
+    var body: some View {
+        ZStack {
+            if echoGeneration > 0, !reduceMotion {
+                CompletionBoltEchoRings(color: Self.flashColor, generation: echoGeneration)
+            }
+
+            ZStack {
+                Image(systemName: "bolt.fill")
+                    .foregroundStyle(.tertiary)
+                    .opacity(isEnergized ? 0 : 1)
+                Image(systemName: "bolt.fill")
+                    .foregroundStyle(Self.flashColor)
+                    .opacity(isEnergized ? 1 : 0)
+            }
+            .scaleEffect(isEnergized ? 1.12 : 1)
+            .rotationEffect(.degrees(isEnergized ? 14 : -12))
+        }
+        .font(.caption)
+        .animation(reduceMotion ? nil : Self.chargeSpring, value: isEnergized)
+        .onAppear { reactToToken(flashToken) }
+        .onChange(of: flashToken) { reactToToken($0) }
+        .onDisappear { chargeTask?.cancel() }
+    }
+
+    private func reactToToken(_ token: Int) {
+        guard token > 0, token != lastSeenToken else { return }
+        lastSeenToken = token
+        chargeTask?.cancel()
+
+        guard !reduceMotion else {
+            isEnergized = true
+            return
+        }
+
+        var snap = Transaction()
+        snap.disablesAnimations = true
+        withTransaction(snap) {
+            isEnergized = false
+        }
+
+        chargeTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 70_000_000)
+            guard !Task.isCancelled else { return }
+            echoGeneration += 1
+            isEnergized = true
+        }
+    }
+}
+
+private struct CompletionBoltEchoRings: View {
+    let color: Color
+    let generation: Int
+
+    var body: some View {
+        ZStack {
+            CompletionBoltEchoRing(color: color, delay: 0)
+                .id("\(generation)-0")
+            CompletionBoltEchoRing(color: color, delay: 0.13)
+                .id("\(generation)-1")
+        }
+    }
+}
+
+private struct CompletionBoltEchoRing: View {
+    let color: Color
+    let delay: Double
+
+    @State private var expanded = false
+
+    var body: some View {
+        Image(systemName: "bolt")
+            .font(.caption)
+            .foregroundStyle(color)
+            .scaleEffect(expanded ? 2.15 : 0.9)
+            .opacity(expanded ? 0 : 0.62)
+            .rotationEffect(.degrees(expanded ? 16 : -12))
+            .onAppear {
+                expanded = false
+                withAnimation(.easeOut(duration: 0.68).delay(delay)) {
+                    expanded = true
+                }
+            }
+    }
+}
+
+private struct CleanFailureDisclosure: View {
+    let failures: [CleanFailureItem]
+    @Binding var isExpanded: Bool
+    let retryingIDs: Set<UUID>
+    let onOpenSettings: () -> Void
+    let onRetry: (CleanFailureItem) -> Void
+
+    private var summaryText: String {
+        failures.count == 1
+            ? "1 item couldn't be cleaned"
+            : "\(failures.count) items couldn't be cleaned"
+    }
+
+    private var visibleFailures: [CleanFailureItem] {
+        Array(failures.prefix(3))
+    }
+
+    private var hiddenCount: Int {
+        max(0, failures.count - visibleFailures.count)
+    }
+
+    var body: some View {
+        VStack(alignment: .center, spacing: 8) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Text(summaryText)
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.semibold))
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                }
+                .font(.callout)
+                .foregroundStyle(.white.opacity(0.6))
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(visibleFailures) { failure in
+                        CleanFailureRow(
+                            failure: failure,
+                            isRetrying: retryingIDs.contains(failure.id),
+                            onOpenSettings: onOpenSettings,
+                            onRetry: onRetry
+                        )
+                    }
+
+                    if hiddenCount > 0 {
+                        Text("+\(hiddenCount) more")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                    }
+                }
+                .frame(maxWidth: 360)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .multilineTextAlignment(.center)
+    }
+}
+
+private struct CleanFailureRow: View {
+    let failure: CleanFailureItem
+    let isRetrying: Bool
+    let onOpenSettings: () -> Void
+    let onRetry: (CleanFailureItem) -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: failure.reason.systemImage)
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .frame(width: 14, alignment: .center)
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(failure.displayName)
+                    .font(.callout)
+                    .foregroundStyle(.white.opacity(0.78))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
+                Text(failure.reason.explanation)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if failure.reason.showsOpenSettings || failure.reason.showsRetry {
+                    HStack(spacing: 10) {
+                        if failure.reason.showsOpenSettings {
+                            Button("Open Settings", action: onOpenSettings)
+                                .buttonStyle(CleanFailureActionButtonStyle())
+                        }
+                        if failure.reason.showsRetry {
+                            Button {
+                                onRetry(failure)
+                            } label: {
+                                if isRetrying {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                        .scaleEffect(0.7)
+                                } else {
+                                    Text("Retry")
+                                }
+                            }
+                            .buttonStyle(CleanFailureActionButtonStyle())
+                            .disabled(isRetrying)
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct CleanFailureActionButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.white.opacity(configuration.isPressed ? 0.55 : 0.72))
     }
 }
 

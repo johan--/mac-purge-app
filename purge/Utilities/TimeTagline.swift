@@ -5,6 +5,7 @@ import Foundation
 enum TimeTagline {
     struct Selection: Equatable {
         let line: String
+        let factPart: String
         let quip: String
     }
 
@@ -26,7 +27,8 @@ enum TimeTagline {
         if pick == lastShown, let reroll = options.randomElement() {
             pick = reroll
         }
-        return Selection(line: "done in \(timeText(for: seconds)) · \(pick)", quip: pick)
+        let fact = "done in \(timeText(for: seconds))"
+        return Selection(line: "\(fact) · \(pick)", factPart: fact, quip: pick)
     }
 
     static func store(_ selection: Selection, defaults: UserDefaults = .standard) {
