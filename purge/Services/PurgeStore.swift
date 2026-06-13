@@ -14,6 +14,7 @@ final class PurgeStore: ObservableObject {
     enum Tab: String, CaseIterable, Identifiable {
         case appCaches = "App Caches"
         case devTools = "Dev Tools"
+        case largeFiles = "Large Files"
         case settings = "Settings"
         case about = "About"
 
@@ -22,6 +23,7 @@ final class PurgeStore: ObservableObject {
             switch self {
             case .appCaches: return "internaldrive"
             case .devTools: return "hammer"
+            case .largeFiles: return "tray.full"
             case .settings: return "gearshape"
             case .about: return "info.circle"
             }
@@ -83,6 +85,9 @@ final class PurgeStore: ObservableObject {
     @Published var devTools: [DevTool] = []
     @Published var simulatorDevices: [SimulatorDevice] = []
     @Published var projectGroups: [ProjectGroup] = []
+    @Published var largeFiles: [LargeFile] = []
+    @Published var isScanningLargeFiles = false
+    @Published var showLargeFileDeletionSheet = false
     /// Best-effort git status keyed by standardized tool path (`URL.path`).
     @Published private(set) var devToolRepoStatusByPath: [String: GitWorktreeStatus] = [:]
     @Published var isScanningGeneral = false
@@ -128,6 +133,7 @@ final class PurgeStore: ObservableObject {
 
     private let cacheScanner = CacheScanner()
     private let devScanner = DevScanner()
+    private let largeFileScanner = LargeFileScanner()
     private let fileDeleter = FileDeleter()
     private let defaults = UserDefaults.standard
     private let gitChecker = GitStatusChecker()
@@ -140,6 +146,7 @@ final class PurgeStore: ObservableObject {
     /// Cancels stale async simulator sizing when a new dev scan starts.
     private var simulatorSizingGeneration = 0
     private var scanGeneration = 0
+    private var largeFileScanGeneration = 0
     /// All cache items discovered so far in the current scan, including rows whose
     /// sizes are still unresolved. Only rows with a resolved non-zero size are
     /// published to `cacheItems`, so visible sections grow monotonically during a scan.
@@ -793,6 +800,109 @@ final class PurgeStore: ObservableObject {
             return
         }
         beginManualDeletionPipeline(with: resolved)
+    }
+
+    // MARK: - Large & Old Files
+
+    var selectedLargeFiles: [LargeFile] {
+        largeFiles.filter(\.isSelected)
+    }
+
+    var selectedLargeFileCount: Int {
+        selectedLargeFiles.count
+    }
+
+    var selectedLargeFileBytes: Int64 {
+        selectedLargeFiles.reduce(Int64(0)) { $0 + $1.sizeBytes }
+    }
+
+    var largeFilesTotalBytes: Int64 {
+        largeFiles.reduce(Int64(0)) { $0 + $1.sizeBytes }
+    }
+
+    func scanLargeFiles() async {
+        guard hasFullDiskAccess else { return }
+        largeFileScanGeneration += 1
+        let generation = largeFileScanGeneration
+        isScanningLargeFiles = true
+        largeFiles = []
+        defer {
+            if largeFileScanGeneration == generation {
+                isScanningLargeFiles = false
+            }
+        }
+
+        let minBytes = LargeFileSizeThreshold.current().bytes
+        let staleDays = LargeFileAgeThreshold.current().days
+        var collected: [LargeFile] = []
+        for await file in largeFileScanner.scanStream(minBytes: minBytes, staleDays: staleDays) {
+            guard largeFileScanGeneration == generation, !Task.isCancelled else { return }
+            collected.append(file)
+            if collected.count % 25 == 0 {
+                largeFiles = collected.sorted { $0.sizeBytes > $1.sizeBytes }
+            }
+        }
+        guard largeFileScanGeneration == generation else { return }
+        largeFiles = collected.sorted { $0.sizeBytes > $1.sizeBytes }
+    }
+
+    func setLargeFileSelected(id: String, isSelected: Bool) {
+        guard let index = largeFiles.firstIndex(where: { $0.id == id }) else { return }
+        largeFiles[index].isSelected = isSelected
+    }
+
+    func setAllLargeFilesSelected(_ selected: Bool, ids: [String]) {
+        let idSet = Set(ids)
+        for index in largeFiles.indices where idSet.contains(largeFiles[index].id) {
+            largeFiles[index].isSelected = selected
+        }
+    }
+
+    func presentLargeFileDeletionSheet() {
+        guard !selectedLargeFiles.isEmpty else { return }
+        showLargeFileDeletionSheet = true
+    }
+
+    func dismissLargeFileDeletionSheet() {
+        showLargeFileDeletionSheet = false
+    }
+
+    func confirmLargeFileDeletion() async {
+        showLargeFileDeletionSheet = false
+        let targets = selectedLargeFiles
+        guard !targets.isEmpty, !isDeleting else { return }
+
+        let urls = targets.map { $0.path.standardizedFileURL }
+        var pathToDisplayName: [String: String] = [:]
+        var pathToExpectedSizeBytes: [String: Int64] = [:]
+        for file in targets {
+            let key = file.path.standardizedFileURL.path
+            pathToDisplayName[key] = file.displayName
+            pathToExpectedSizeBytes[key] = file.sizeBytes
+        }
+
+        isDeleting = true
+        errorMessage = nil
+        defer { isDeleting = false }
+
+        do {
+            let report = try await fileDeleter.deleteUserSelectedFiles(
+                at: urls,
+                pathToDisplayName: pathToDisplayName,
+                pathToExpectedSizeBytes: pathToExpectedSizeBytes
+            )
+            incrementRecoveredTotal(by: report.totalDeleted)
+            lastDeletionReport = report
+            let deletedPaths = Set(report.deletedItems.map {
+                URL(fileURLWithPath: $0.path).standardizedFileURL.path
+            })
+            withAnimation(.easeInOut(duration: 0.2)) {
+                largeFiles.removeAll { deletedPaths.contains($0.id) }
+            }
+            CleanupHistoryStore.shared.append(trigger: .manual, report: report)
+        } catch {
+            errorMessage = "Unable to delete the selected files. Please try again."
+        }
     }
 
     func refreshPermission() {

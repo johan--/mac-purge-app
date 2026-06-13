@@ -210,6 +210,68 @@ final class FileDeleter {
         return report
     }
 
+    /// Dedicated route for the Large & Old Files feature. It only handles
+    /// individually selected regular files and always moves them to Trash.
+    func deleteUserSelectedFiles(
+        at urls: [URL],
+        pathToDisplayName: [String: String] = [:],
+        pathToExpectedSizeBytes: [String: Int64] = [:],
+        onProgress: (@Sendable (DeletionProgressEvent) -> Void)? = nil
+    ) async throws -> DeletionReport {
+        var totalDeleted: Int64 = 0
+        var deletedItems: [DeletedItem] = []
+        var failedItems: [FailedDeletionItem] = []
+        var skippedItems: [SkippedDeletionItem] = []
+        let volumeURL = FileManager.default.homeDirectoryForCurrentUser
+        let capacityBefore = volumeCapacitySnapshot(for: volumeURL)
+
+        for url in urls {
+            let standardizedPath = url.standardizedFileURL.path
+            let friendlyTitle = pathToDisplayName[standardizedPath]
+
+            guard LargeFileScanPolicy.isEligibleForDeletion(url) else {
+                skippedItems.append(SkippedDeletionItem(
+                    path: url.path,
+                    displayName: friendlyTitle,
+                    reason: "This file was skipped for safety",
+                    isUserVisible: true
+                ))
+                continue
+            }
+
+            onProgress?(.itemStarted(name: friendlyTitle ?? url.lastPathComponent))
+            let size = pathToExpectedSizeBytes[standardizedPath] ?? FolderSizing.singleFileSize(at: url)
+            do {
+                try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+                totalDeleted += size
+                deletedItems.append(DeletedItem(path: url.path, sizeBytes: size, displayName: friendlyTitle))
+                onProgress?(.itemDeleted(sizeBytes: size))
+            } catch {
+                recordDeletionFailure(
+                    path: url.path,
+                    error: error,
+                    displayName: friendlyTitle,
+                    sizeBytes: size,
+                    failedItems: &failedItems
+                )
+            }
+        }
+
+        let capacityAfter = volumeCapacitySnapshot(for: volumeURL)
+        let report = DeletionReport(
+            totalDeleted: totalDeleted,
+            deletedItems: deletedItems,
+            failedItems: failedItems,
+            skippedItems: skippedItems,
+            volumeCapacity: capacityAfter.total,
+            availableCapacityBefore: capacityBefore.available,
+            availableCapacityAfter: capacityAfter.available,
+            timestamp: Date()
+        )
+        deletionLog.append(report)
+        return report
+    }
+
     /// Returns the simulator UDID when `url` is exactly `…/CoreSimulator/Devices/{UUID}`.
     private static func coreSimulatorDeviceUDID(from url: URL) -> String? {
         let std = url.standardizedFileURL

@@ -58,6 +58,13 @@ struct ContentView: View {
                 }
             )
         }
+        .sheet(isPresented: $store.showLargeFileDeletionSheet) {
+            LargeFileDeletionConfirmSheet(
+                files: store.selectedLargeFiles,
+                onCancel: { store.dismissLargeFileDeletionSheet() },
+                onConfirm: { Task { await store.confirmLargeFileDeletion() } }
+            )
+        }
         .disabled(store.isManualCleaningInProgress)
         .overlay {
             if isLifecycleActive, let session = store.interactiveSafeCleanupSession {
@@ -292,6 +299,8 @@ struct ContentView: View {
             appCachesTabBody
         case .devTools:
             devToolsTabBody
+        case .largeFiles:
+            largeFilesTabBody
         case .settings:
             settingsTabBody
         }
@@ -368,6 +377,27 @@ struct ContentView: View {
     }
 
     @ViewBuilder
+    private var largeFilesTabBody: some View {
+        Group {
+            if #available(macOS 26.0, *) {
+                LargeFilesView(
+                    isLoading: store.isScanningLargeFiles,
+                    onScan: { Task { await store.scanLargeFiles() } },
+                    showsPageHeader: false,
+                    usesExternalScrollContainer: true
+                )
+            } else {
+                LargeFilesView(
+                    isLoading: store.isScanningLargeFiles,
+                    onScan: { Task { await store.scanLargeFiles() } },
+                    showsPageHeader: false
+                )
+            }
+        }
+        .underDetailPageHeader(includesSubtitle: true)
+    }
+
+    @ViewBuilder
     private var aboutTabBody: some View {
         Group {
             if #available(macOS 26.0, *) {
@@ -393,6 +423,8 @@ struct ContentView: View {
         AppSectionPageHeader(title: store.selectedTab.rawValue, subtitle: selectedPageSubtitle) {
             if store.selectedTab == .appCaches || store.selectedTab == .devTools {
                 AppScanCleanActions(onScan: { Task { await store.scanAll() } }, scanPhase: store.scanPhase)
+            } else if store.selectedTab == .largeFiles {
+                LargeFilesHeaderActions()
             }
         }
     }
@@ -403,6 +435,8 @@ struct ContentView: View {
             return pageSubtitle(count: appCachesSubtitleItemCount, bytes: appCachesSubtitleTotalSize)
         case .devTools:
             return pageSubtitle(count: devToolsSubtitleItemCount, bytes: devToolsSubtitleTotalSize)
+        case .largeFiles:
+            return largeFilesPageSubtitle
         case .settings:
             return nil
         case .about:
@@ -413,6 +447,11 @@ struct ContentView: View {
     private func pageSubtitle(count: Int, bytes: Int64) -> String {
         let itemLabel = count == 1 ? "item" : "items"
         return "\(count) \(itemLabel) · \(formatBytes(bytes)) recoverable"
+    }
+
+    private var largeFilesPageSubtitle: String {
+        let fileLabel = store.largeFiles.count == 1 ? "file" : "files"
+        return "\(store.largeFiles.count) \(fileLabel) · \(formatBytes(store.largeFilesTotalBytes)) to review"
     }
 
     private var appCachesSafetyFilter: SafetyFilter {
@@ -542,6 +581,9 @@ private struct DiskSummaryRefreshModifier: ViewModifier {
                 if !scanning { diskStore.refresh() }
             }
             .onChange(of: store.isScanningDeveloper) { scanning in
+                if !scanning { diskStore.refresh() }
+            }
+            .onChange(of: store.isScanningLargeFiles) { scanning in
                 if !scanning { diskStore.refresh() }
             }
             .onChange(of: store.lastDeletionReport?.id) { _ in
