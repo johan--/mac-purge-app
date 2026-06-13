@@ -654,11 +654,11 @@ struct SidebarSummaryView: View {
         animationValue: Int64,
         isValueLoading: Bool = false
     ) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Image(systemName: symbol)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(color)
-                .frame(width: 16, alignment: .center)
+                .frame(width: 14, alignment: .center)
 
             Text(label)
                 .font(SummaryFont.label)
