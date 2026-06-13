@@ -59,6 +59,7 @@ struct PurgeApp: App {
     }
 
     init() {
+        LargeFileFilterDefaults.register()
         UNUserNotificationCenter.current().delegate = ScheduledNotificationPresentationDelegate.shared
     }
 

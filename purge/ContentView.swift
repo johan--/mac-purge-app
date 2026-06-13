@@ -17,6 +17,7 @@ struct ContentView: View {
     @AppStorage("onboarding.pendingCelebration") private var pendingOnboardingCelebration = false
     @AppStorage("filter.appCaches") private var appCachesFilterRaw: String = SafetyFilter.all.rawValue
     @AppStorage("filter.devTools") private var devToolsFilterRaw: String = SafetyFilter.all.rawValue
+    @AppStorage("filter.largeFiles") private var largeFilesCategoryFilterRaw: String = "all"
     @AppStorage(AppearanceMode.userDefaultsKey)
     private var appearanceModeRaw = AppearanceMode.system.rawValue
     private let isRunningPreview = ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
@@ -395,6 +396,10 @@ struct ContentView: View {
             }
         }
         .underDetailPageHeader(includesSubtitle: true)
+        .task {
+            guard !isRunningPreview else { return }
+            await store.scanLargeFilesIfNeeded()
+        }
     }
 
     @ViewBuilder
@@ -449,9 +454,17 @@ struct ContentView: View {
         return "\(count) \(itemLabel) · \(formatBytes(bytes)) recoverable"
     }
 
+    private var largeFilesVisibleForSubtitle: [LargeFile] {
+        store.largeFiles.filter { file in
+            largeFilesCategoryFilterRaw == "all" || file.category.rawValue == largeFilesCategoryFilterRaw
+        }
+    }
+
     private var largeFilesPageSubtitle: String {
-        let fileLabel = store.largeFiles.count == 1 ? "file" : "files"
-        return "\(store.largeFiles.count) \(fileLabel) · \(formatBytes(store.largeFilesTotalBytes)) to review"
+        let files = largeFilesVisibleForSubtitle
+        let bytes = files.reduce(Int64(0)) { $0 + $1.sizeBytes }
+        let fileLabel = files.count == 1 ? "file" : "files"
+        return "\(files.count) \(fileLabel) · \(formatBytes(bytes)) to review"
     }
 
     private var appCachesSafetyFilter: SafetyFilter {

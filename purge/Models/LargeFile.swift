@@ -67,17 +67,18 @@ struct LargeFile: Identifiable, Hashable {
     var id: String { path.standardizedFileURL.path }
     var displayName: String { path.lastPathComponent }
     var formattedSize: String { formatBytes(sizeBytes) }
-    var locationLabel: String { path.deletingLastPathComponent().lastPathComponent }
+    var locationLabel: String { displayDirectoryPath(for: path.deletingLastPathComponent()) }
 }
 
 enum LargeFileSizeThreshold: Int, CaseIterable, Identifiable {
+    case mb5 = 5
+    case mb50 = 50
     case mb100 = 100
     case mb250 = 250
     case mb500 = 500
     case gb1 = 1024
-    case gb2 = 2048
 
-    static let userDefaultsKey = "largeFiles.minSizeMB"
+    static let userDefaultsKey = "filter.largeFiles.size"
     static let defaultOption: LargeFileSizeThreshold = .mb100
 
     var id: Int { rawValue }
@@ -85,12 +86,17 @@ enum LargeFileSizeThreshold: Int, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
+        case .mb5: return "5 MB"
+        case .mb50: return "50 MB"
         case .mb100: return "100 MB"
         case .mb250: return "250 MB"
         case .mb500: return "500 MB"
         case .gb1: return "1 GB"
-        case .gb2: return "2 GB"
         }
+    }
+
+    var menuButtonLabel: String {
+        "Larger than \(label)"
     }
 
     static func current(userDefaults: UserDefaults = .standard) -> LargeFileSizeThreshold {
@@ -99,27 +105,60 @@ enum LargeFileSizeThreshold: Int, CaseIterable, Identifiable {
 }
 
 enum LargeFileAgeThreshold: Int, CaseIterable, Identifiable {
+    case anyTime = 0
+    case oneMonth = 30
     case months3 = 90
     case months6 = 180
     case year1 = 365
-    case years2 = 730
 
-    static let userDefaultsKey = "largeFiles.minAgeDays"
-    static let defaultOption: LargeFileAgeThreshold = .months6
+    static let userDefaultsKey = "filter.largeFiles.lastUsed"
+    static let defaultOption: LargeFileAgeThreshold = .anyTime
 
     var id: Int { rawValue }
     var days: Int { rawValue }
 
     var label: String {
         switch self {
-        case .months3: return "3 months"
-        case .months6: return "6 months"
-        case .year1: return "1 year"
-        case .years2: return "2 years"
+        case .anyTime: return "Any time"
+        case .oneMonth: return "Over 1 month ago"
+        case .months3: return "Over 3 months ago"
+        case .months6: return "Over 6 months ago"
+        case .year1: return "Over 1 year ago"
         }
+    }
+
+    var menuButtonLabel: String {
+        "Last used: \(label)"
     }
 
     static func current(userDefaults: UserDefaults = .standard) -> LargeFileAgeThreshold {
         LargeFileAgeThreshold(rawValue: userDefaults.integer(forKey: userDefaultsKey)) ?? defaultOption
+    }
+
+    nonisolated static func currentThresholdDays(userDefaults: UserDefaults = .standard) -> Int {
+        let raw = userDefaults.integer(forKey: userDefaultsKey)
+        if raw == anyTime.rawValue {
+            return anyTime.rawValue
+        }
+        return LargeFileAgeThreshold(rawValue: raw)?.rawValue ?? defaultOption.rawValue
+    }
+}
+
+enum LargeFileFilterDefaults {
+    private static let legacySizeKey = "largeFiles.minSizeMB"
+
+    static func register(userDefaults: UserDefaults = .standard) {
+        if userDefaults.object(forKey: LargeFileSizeThreshold.userDefaultsKey) == nil,
+           userDefaults.object(forKey: legacySizeKey) != nil {
+            let legacySize = userDefaults.integer(forKey: legacySizeKey)
+            if LargeFileSizeThreshold(rawValue: legacySize) != nil {
+                userDefaults.set(legacySize, forKey: LargeFileSizeThreshold.userDefaultsKey)
+            }
+        }
+
+        userDefaults.register(defaults: [
+            LargeFileSizeThreshold.userDefaultsKey: LargeFileSizeThreshold.defaultOption.rawValue,
+            LargeFileAgeThreshold.userDefaultsKey: LargeFileAgeThreshold.defaultOption.rawValue,
+        ])
     }
 }

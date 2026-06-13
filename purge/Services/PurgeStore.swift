@@ -147,6 +147,7 @@ final class PurgeStore: ObservableObject {
     private var simulatorSizingGeneration = 0
     private var scanGeneration = 0
     private var largeFileScanGeneration = 0
+    private var hasCompletedLargeFileScan = false
     /// All cache items discovered so far in the current scan, including rows whose
     /// sizes are still unresolved. Only rows with a resolved non-zero size are
     /// published to `cacheItems`, so visible sections grow monotonically during a scan.
@@ -820,6 +821,12 @@ final class PurgeStore: ObservableObject {
         largeFiles.reduce(Int64(0)) { $0 + $1.sizeBytes }
     }
 
+    func scanLargeFilesIfNeeded() async {
+        guard hasFullDiskAccess else { return }
+        guard !isScanningLargeFiles, !hasCompletedLargeFileScan else { return }
+        await scanLargeFiles()
+    }
+
     func scanLargeFiles() async {
         guard hasFullDiskAccess else { return }
         largeFileScanGeneration += 1
@@ -833,7 +840,7 @@ final class PurgeStore: ObservableObject {
         }
 
         let minBytes = LargeFileSizeThreshold.current().bytes
-        let staleDays = LargeFileAgeThreshold.current().days
+        let staleDays = LargeFileAgeThreshold.currentThresholdDays()
         var collected: [LargeFile] = []
         for await file in largeFileScanner.scanStream(minBytes: minBytes, staleDays: staleDays) {
             guard largeFileScanGeneration == generation, !Task.isCancelled else { return }
@@ -844,6 +851,7 @@ final class PurgeStore: ObservableObject {
         }
         guard largeFileScanGeneration == generation else { return }
         largeFiles = collected.sorted { $0.sizeBytes > $1.sizeBytes }
+        hasCompletedLargeFileScan = true
     }
 
     func setLargeFileSelected(id: String, isSelected: Bool) {

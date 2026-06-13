@@ -54,8 +54,10 @@ final class LargeFileScanner {
                 let accessed = values?.contentAccessDate ?? .distantPast
                 let modified = values?.contentModificationDate ?? .distantPast
                 let lastUsed = max(accessed, modified)
-                let days = Calendar.current.dateComponents([.day], from: lastUsed, to: now).day ?? 0
-                guard days >= staleDays else { continue }
+                if staleDays > 0 {
+                    let days = Calendar.current.dateComponents([.day], from: lastUsed, to: now).day ?? 0
+                    guard days >= staleDays else { continue }
+                }
 
                 continuation.yield(
                     LargeFile(

@@ -195,12 +195,16 @@ struct LargeFilesView: View {
                 }
             }
         } label: {
-            Label(sizeThreshold.label, systemImage: "arrow.up.forward.circle")
-                .labelStyle(.titleAndIcon)
+            filterDropdownLabel(
+                title: sizeThreshold.menuButtonLabel,
+                systemImage: "arrow.up.forward.circle"
+            )
         }
         .menuStyle(.button)
         .buttonStyle(AppButtonStyle(variant: .bordered))
         .fixedSize()
+        .accessibilityLabel("Size filter")
+        .accessibilityValue(sizeThreshold.menuButtonLabel)
     }
 
     private var ageMenu: some View {
@@ -218,12 +222,28 @@ struct LargeFilesView: View {
                 }
             }
         } label: {
-            Label(ageThreshold.label, systemImage: "calendar")
-                .labelStyle(.titleAndIcon)
+            filterDropdownLabel(
+                title: ageThreshold.menuButtonLabel,
+                systemImage: "calendar"
+            )
         }
         .menuStyle(.button)
         .buttonStyle(AppButtonStyle(variant: .bordered))
         .fixedSize()
+        .accessibilityLabel("Last used filter")
+        .accessibilityValue(ageThreshold.menuButtonLabel)
+    }
+
+    private func filterDropdownLabel(title: String, systemImage: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .imageScale(.small)
+            Text(title)
+                .lineLimit(1)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+        }
     }
 
     private func categoryChip(id: String, title: String, systemImage: String, count: Int) -> some View {
@@ -331,7 +351,7 @@ struct LargeFilesView: View {
                 .foregroundStyle(.secondary)
             Text("No Large Files Found")
                 .font(.title3)
-            Text("Try a smaller size or newer last-used range.")
+            Text("Try a lower size threshold or a shorter last-used window.")
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -362,8 +382,10 @@ struct LargeFilesView: View {
     }
 
     private var pageSubtitle: String {
-        let itemLabel = store.largeFiles.count == 1 ? "file" : "files"
-        return "\(store.largeFiles.count) \(itemLabel) · \(formatBytes(store.largeFilesTotalBytes)) to review"
+        let count = visibleFiles.count
+        let bytes = visibleFiles.reduce(Int64(0)) { $0 + $1.sizeBytes }
+        let itemLabel = count == 1 ? "file" : "files"
+        return "\(count) \(itemLabel) · \(formatBytes(bytes)) to review"
     }
 
     private var reviewButtonTitle: String {
@@ -393,6 +415,10 @@ private struct LargeFileRow: View {
         NSWorkspace.shared.activateFileViewerSelecting([fileURL])
     }
 
+    private func quickLook() {
+        QuickLookPreview.show(url: fileURL)
+    }
+
     var body: some View {
         HStack(spacing: 10) {
             Toggle("", isOn: $isSelected)
@@ -403,21 +429,15 @@ private struct LargeFileRow: View {
                 Button {
                     isSelected.toggle()
                 } label: {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(AppStyle.selectionFill)
-                        Image(systemName: file.category.symbolName)
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(AppStyle.accent)
-                    }
-                    .frame(width: AppStyle.Row.listIconFrameSize, height: AppStyle.Row.listIconFrameSize)
+                    Image(systemName: file.category.symbolName)
+                        .font(.system(size: AppStyle.Row.sfSymbolPointSize))
+                        .foregroundStyle(.secondary)
+                        .frame(width: AppStyle.Row.listIconFrameSize, height: AppStyle.Row.listIconFrameSize)
                 }
                 .buttonStyle(.plain)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Button {
-                        isSelected.toggle()
-                    } label: {
+                    Button(action: quickLook) {
                         Text(file.displayName)
                             .font(AppStyle.Typography.rowTitle)
                             .lineLimit(1)
@@ -426,17 +446,28 @@ private struct LargeFileRow: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .onHover { hovering in
+                        if hovering {
+                            NSCursor.pointingHand.push()
+                        } else {
+                            NSCursor.pop()
+                        }
+                    }
+                    .help("Quick Look")
+                    .accessibilityLabel("Quick Look \(file.displayName)")
 
                     HStack(spacing: 6) {
                         Button(action: revealInFinder) {
                             Text(file.locationLabel)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                                 .underline(isHoveringLocation)
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(AppStyle.accent)
                         .onHover { isHoveringLocation = $0 }
                         .help("Show in Finder\n\(parentFolderPath)")
-                        .accessibilityLabel("Reveal \(file.locationLabel) in Finder")
+                        .accessibilityLabel("Reveal in Finder, \(file.locationLabel)")
 
                         Text("·")
                             .foregroundStyle(.secondary)
@@ -458,6 +489,10 @@ private struct LargeFileRow: View {
         }
         .padding(.vertical, 7)
         .contextMenu {
+            Button("Quick Look") {
+                quickLook()
+            }
+
             Button("Show in Finder") {
                 revealInFinder()
             }
