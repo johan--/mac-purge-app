@@ -17,30 +17,13 @@ struct ContentView: View {
     @AppStorage("onboarding.pendingCelebration") private var pendingOnboardingCelebration = false
     @AppStorage("filter.appCaches") private var appCachesFilterRaw: String = SafetyFilter.all.rawValue
     @AppStorage("filter.devTools") private var devToolsFilterRaw: String = SafetyFilter.all.rawValue
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
     private let isRunningPreview = ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
+        HStack(spacing: 0) {
             sidebar
-        } detail: {
-            Group {
-                if store.hasFullDiskAccess {
-                    tabContent
-                        .frame(minWidth: 600, minHeight: 400)
-                } else {
-                    PermissionPromptView {
-                        store.refreshPermission()
-                        if store.hasFullDiskAccess && !isRunningPreview {
-                            Task { await store.scanAll() }
-                        }
-                    }
-                }
-            }
-            .detailColumnCompactTop()
-        }
-        .onAppear {
-            columnVisibility = .all
+            sidebarDivider
+            detailColumn
         }
         .task {
             await scanIfNeeded()
@@ -160,9 +143,36 @@ struct ContentView: View {
         .frame(width: AppWindowLayout.width)
         .frame(minHeight: AppWindowLayout.minHeight)
         .fixedAppWindowWidth()
-        .animatedSidebarCollapse(columnVisibility: $columnVisibility, reduceMotion: reduceMotion)
         .tint(AppStyle.accent)
         .modifier(DiskSummaryRefreshModifier())
+    }
+
+    /// Hairline between the flush sidebar and the detail column, matching the
+    /// separator NavigationSplitView used to draw.
+    private var sidebarDivider: some View {
+        Rectangle()
+            .fill(AppStyle.hairline)
+            .frame(width: 1)
+            .frame(maxHeight: .infinity)
+            .ignoresSafeArea(.container, edges: .top)
+    }
+
+    private var detailColumn: some View {
+        Group {
+            if store.hasFullDiskAccess {
+                tabContent
+                    .frame(minWidth: 600, minHeight: 400)
+            } else {
+                PermissionPromptView {
+                    store.refreshPermission()
+                    if store.hasFullDiskAccess && !isRunningPreview {
+                        Task { await store.scanAll() }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .detailColumnCompactTop()
     }
 
     private func scanIfNeeded() async {
@@ -251,7 +261,6 @@ struct ContentView: View {
         .frame(width: SidebarLayout.width)
         .background(AppStyle.panel)
         .sidebarCompactTop()
-        .navigationSplitViewColumnWidth(SidebarLayout.width)
     }
 
     /// Shared overlaid header so `AnimatedPageTitle` stays mounted across tab switches.

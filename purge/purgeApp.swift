@@ -49,7 +49,7 @@ struct PurgeApp: App {
         }
         .defaultSize(width: AppWindowLayout.width, height: AppWindowLayout.defaultHeight)
         .windowResizability(.contentSize)
-        .windowToolbarStyle(.unified(showsTitle: false))
+        .windowStyle(.hiddenTitleBar)
         .commands {
             PurgeCommands(store: store)
         }
