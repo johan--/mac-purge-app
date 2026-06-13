@@ -264,21 +264,19 @@ struct SettingsView: View {
                 settingsSectionDivider
 
                 VStack(spacing: 8) {
-                    settingPickerRow(title: "How often") {
-                        Picker("How often", selection: $prefs.frequency) {
-                            ForEach(ScheduledCleaningFrequency.allCases, id: \.self) { frequency in
-                                Text(frequency.displayName).tag(frequency)
-                            }
-                        }
-                    }
+                    settingPickerRow(
+                        title: "How often",
+                        selection: $prefs.frequency,
+                        options: ScheduledCleaningFrequency.allCases,
+                        optionLabel: \.displayName
+                    )
 
-                    settingPickerRow(title: "Untouched for") {
-                        Picker("Untouched for", selection: $prefs.unusedDays) {
-                            ForEach(ScheduledCleaningUnusedDaysOption.allCases, id: \.self) { option in
-                                Text(option.label).tag(option)
-                            }
-                        }
-                    }
+                    settingPickerRow(
+                        title: "Untouched for",
+                        selection: $prefs.unusedDays,
+                        options: ScheduledCleaningUnusedDaysOption.allCases,
+                        optionLabel: \.label
+                    )
                 }
                 .padding(16)
                 .disabled(!prefs.isEnabled)
@@ -305,13 +303,12 @@ struct SettingsView: View {
 
             settingsSectionCard {
                 VStack(alignment: .leading, spacing: 12) {
-                    settingPickerRow(title: "Consider stale after") {
-                        Picker("Consider stale after", selection: devToolsStalenessSelectionBinding) {
-                            ForEach(DevToolsStalenessOption.allCases, id: \.self) { option in
-                                Text(option.label).tag(option)
-                            }
-                        }
-                    }
+                    settingPickerRow(
+                        title: "Consider stale after",
+                        selection: devToolsStalenessSelectionBinding,
+                        options: DevToolsStalenessOption.allCases,
+                        optionLabel: \.label
+                    )
 
                     Text(currentDevToolsStalenessOption.description)
                         .foregroundStyle(.secondary)
@@ -382,9 +379,11 @@ struct SettingsView: View {
     }
     */
 
-    private func settingPickerRow<PickerContent: View>(
+    private func settingPickerRow<Option: Hashable>(
         title: String,
-        @ViewBuilder picker: () -> PickerContent
+        selection: Binding<Option>,
+        options: [Option],
+        optionLabel: @escaping (Option) -> String
     ) -> some View {
         ViewThatFits(in: .horizontal) {
             HStack {
@@ -393,20 +392,25 @@ struct SettingsView: View {
 
                 Spacer(minLength: 12)
 
-                picker()
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .fixedSize()
+                SettingsMenuPicker(
+                    selection: selection,
+                    options: options,
+                    optionLabel: optionLabel,
+                    accessibilityTitle: title
+                )
             }
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
                     .foregroundStyle(.secondary)
 
-                picker()
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                SettingsMenuPicker(
+                    selection: selection,
+                    options: options,
+                    optionLabel: optionLabel,
+                    accessibilityTitle: title,
+                    fillsWidth: true
+                )
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -731,6 +735,71 @@ private struct TelemetryPreviewSheet: View {
     }
 }
 */
+
+private struct SettingsMenuPicker<Option: Hashable>: View {
+    @Binding var selection: Option
+    let options: [Option]
+    let optionLabel: (Option) -> String
+    let accessibilityTitle: String
+    var fillsWidth = false
+
+    private var labelMinWidth: CGFloat { fillsWidth ? 0 : 120 }
+
+    var body: some View {
+        Menu {
+            ForEach(options, id: \.self) { option in
+                Button {
+                    selection = option
+                } label: {
+                    if option == selection {
+                        Label(optionLabel(option), systemImage: "checkmark")
+                    } else {
+                        Text(optionLabel(option))
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text(optionLabel(selection))
+                    .lineLimit(1)
+
+                Spacer(minLength: fillsWidth ? 8 : 0)
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(minWidth: labelMinWidth)
+            .frame(maxWidth: fillsWidth ? .infinity : nil, alignment: .leading)
+        }
+        .menuStyle(.button)
+        .buttonStyle(SettingsPickerButtonStyle())
+        .fixedSize(horizontal: !fillsWidth, vertical: true)
+        .accessibilityLabel(accessibilityTitle)
+        .accessibilityValue(optionLabel(selection))
+    }
+}
+
+private struct SettingsPickerButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                configuration.isPressed ? AppStyle.rowHover : AppStyle.controlFill,
+                in: RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
+                    .strokeBorder(AppStyle.hairline, lineWidth: 0.5)
+            }
+            .opacity(isEnabled ? 1 : 0.45)
+    }
+}
 
 private struct AppearanceOptionButton: View {
     let mode: AppearanceMode

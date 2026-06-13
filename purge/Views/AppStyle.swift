@@ -52,8 +52,16 @@ enum AppStyle {
         light: NSColor.white,
         dark: NSColor(srgbRed: 37 / 255, green: 37 / 255, blue: 37 / 255, alpha: 1) // #252525
     )
+    /// Form controls (dropdowns, fields) — slightly distinct from `elevated` cards.
+    static let controlFill = Color(
+        light: NSColor(calibratedWhite: 0.94, alpha: 1),
+        dark: NSColor(calibratedWhite: 0.22, alpha: 1)
+    )
     static let rowHover = Color(light: NSColor(calibratedWhite: 0.94, alpha: 1), dark: NSColor(calibratedWhite: 0.16, alpha: 1))
-    static let hairline = Color.primary.opacity(0.1)
+    static let hairline = Color(
+        light: NSColor.black.withAlphaComponent(0.1),
+        dark: NSColor.white.withAlphaComponent(0.1)
+    )
 
     static let safe = Color(red: 54 / 255, green: 148 / 255, blue: 104 / 255)
     static let warning = Color(red: 187 / 255, green: 126 / 255, blue: 51 / 255)

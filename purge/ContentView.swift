@@ -17,6 +17,8 @@ struct ContentView: View {
     @AppStorage("onboarding.pendingCelebration") private var pendingOnboardingCelebration = false
     @AppStorage("filter.appCaches") private var appCachesFilterRaw: String = SafetyFilter.all.rawValue
     @AppStorage("filter.devTools") private var devToolsFilterRaw: String = SafetyFilter.all.rawValue
+    @AppStorage(AppearanceMode.userDefaultsKey)
+    private var appearanceModeRaw = AppearanceMode.system.rawValue
     private let isRunningPreview = ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
 
     var body: some View {
@@ -155,6 +157,7 @@ struct ContentView: View {
             .frame(width: 1)
             .frame(maxHeight: .infinity)
             .ignoresSafeArea(.container, edges: .top)
+            .id(appearanceModeRaw)
     }
 
     private var detailColumn: some View {

@@ -11,6 +11,11 @@ import UserNotifications
 
 @MainActor
 final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Apply the saved appearance before the first paint to avoid a launch flash.
+        AppAppearance.apply(AppearanceMode.current)
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         CleaningQuitGuard.shouldAllowTermination() ? .terminateNow : .terminateCancel
     }
@@ -23,9 +28,25 @@ struct PurgeApp: App {
     @StateObject private var diskStore = DiskSummaryStore()
     @AppStorage(AppearanceMode.userDefaultsKey)
     private var appearanceModeRaw = AppearanceMode.system.rawValue
+    @State private var systemThemeObserver: NSObjectProtocol?
+    @State private var activeColorScheme: ColorScheme = {
+        let mode = AppearanceMode.current
+        switch mode {
+        case .light: return .light
+        case .dark: return .dark
+        case .system: return .light
+        }
+    }()
 
     private var appearanceMode: AppearanceMode {
         AppearanceMode(rawValue: appearanceModeRaw) ?? .system
+    }
+
+    /// SwiftUI semantic colors need `preferredColorScheme`; AppKit-backed menu
+    /// pickers need `NSApp`/`NSWindow` appearance. Apply both together.
+    private func applyAppAppearance() {
+        AppAppearance.apply(appearanceMode)
+        activeColorScheme = appearanceMode.resolvedColorScheme
     }
 
     init() {
@@ -43,9 +64,22 @@ struct PurgeApp: App {
                     CleaningQuitGuard.isCleaningActive = { [weak store] in
                         store?.isManualCleaningInProgress ?? false
                     }
+                    applyAppAppearance()
+                    systemThemeObserver = AppAppearance.addSystemThemeObserver {
+                        guard appearanceMode == .system else { return }
+                        applyAppAppearance()
+                    }
                 }
                 .font(.system(.body, design: .rounded))
-                .preferredColorScheme(appearanceMode.colorScheme)
+                .preferredColorScheme(activeColorScheme)
+                .onChange(of: appearanceModeRaw) { _ in
+                    applyAppAppearance()
+                }
+                .onDisappear {
+                    if let systemThemeObserver {
+                        DistributedNotificationCenter.default().removeObserver(systemThemeObserver)
+                    }
+                }
         }
         .defaultSize(width: AppWindowLayout.width, height: AppWindowLayout.defaultHeight)
         .windowResizability(.contentSize)
