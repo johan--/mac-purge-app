@@ -42,6 +42,15 @@ struct PurgeApp: App {
         AppearanceMode(rawValue: appearanceModeRaw) ?? .system
     }
 
+    private var scanMenuTitle: String {
+        store.scanPhase == .scanning ? "Scanning…" : "Scan Now"
+    }
+
+    private var cleanMenuTitle: String {
+        if store.isDeleting { return "Cleaning…" }
+        return store.safeRecoverableBytes > 0 ? "Clean Safe Files Now" : "Nothing to clean"
+    }
+
     /// SwiftUI semantic colors need `preferredColorScheme`; AppKit-backed menu
     /// pickers need `NSApp`/`NSWindow` appearance. Apply both together.
     private func applyAppAppearance() {
@@ -88,27 +97,29 @@ struct PurgeApp: App {
             PurgeCommands(store: store)
         }
 
-        MenuBarExtra(formatBytes(store.safeRecoverableBytes), systemImage: "externaldrive.badge.minus") {
+        MenuBarExtra(formatBytes(store.safeRecoverableBytes), systemImage: "paintbrush.fill") {
             Button("Open Purge") {
                 NSApp.activate(ignoringOtherApps: true)
                 NSApp.windows.first?.makeKeyAndOrderFront(nil)
             }
-            Divider()
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Safe to clean: \(formatBytes(store.safeRecoverableBytes))")
-                    .font(.headline)
-                Text("\(formatBytes(store.totalRecoveredBytes)) recovered so far")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+
+            Button(scanMenuTitle) {
+                Task { await store.scanAll() }
             }
-            .padding(.horizontal, 4)
-            .padding(.vertical, 2)
-            Divider()
-            Button("Clean Safe Files Now") {
+            .disabled(!store.hasFullDiskAccess || store.isDeleting || store.scanPhase == .scanning)
+
+            Button(cleanMenuTitle) {
                 Task { await store.performManualSafeCleanNow() }
             }
-            .disabled(store.isDeleting)
+            .disabled(store.safeRecoverableBytes == 0 || store.isDeleting)
+
+            if store.hasDisplayableLifetimeStats {
+                Divider()
+                Text("\(formatBytes(store.totalRecoveredBytes)) cleaned all-time")
+            }
+
             Divider()
+
             Button("Quit Purge") {
                 NSApplication.shared.terminate(nil)
             }
