@@ -12,6 +12,10 @@ final class ScheduledCleaningRegistrar {
 
     private static let lastGraceSweepKey = "ScheduledCleaningRegistrar.lastGraceSweep"
 
+    static var lastGraceSweepDate: Date? {
+        UserDefaults.standard.object(forKey: lastGraceSweepKey) as? Date
+    }
+
     private weak var store: PurgeStore?
     private var prefsObserver: NSObjectProtocol?
 
