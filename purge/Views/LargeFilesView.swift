@@ -270,6 +270,7 @@ struct LargeFilesView: View {
                 RoundedRectangle(cornerRadius: AppStyle.Radius.chip, style: .continuous)
                     .strokeBorder(isOn ? AppStyle.selectionStroke : Color.clear, lineWidth: 1)
             }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

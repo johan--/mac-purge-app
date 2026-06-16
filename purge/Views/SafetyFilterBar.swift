@@ -283,6 +283,7 @@ struct FilterSortToolbar: View {
             }
             .foregroundStyle(isOn ? Color.primary : Color.secondary)
             .opacity(count == 0 && !isOn ? 0.45 : 1.0)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(filter.displayName), \(count) items")
