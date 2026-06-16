@@ -4,6 +4,7 @@ import SwiftUI
 struct AboutView: View {
     @EnvironmentObject private var store: PurgeStore
     @StateObject private var updateChecker = UpdateChecker()
+    @StateObject private var fundingStore = FundingStore()
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     var showsPageHeader = true
     /// When true, the parent owns scrolling and the macOS 26 progressive scroll-edge blur.
@@ -34,11 +35,15 @@ struct AboutView: View {
         VStack(alignment: .leading, spacing: 20) {
             appIdentitySection
             lifetimeStatsSection
+            fundingSection
             actionCardSection
             footerSection
         }
         .frame(maxWidth: 560)
         .frame(maxWidth: .infinity, alignment: .center)
+        .task {
+            await fundingStore.refresh()
+        }
         .padding(.horizontal, AppDetailPageLayout.horizontalInset)
         .padding(
             .top,
@@ -136,6 +141,99 @@ struct AboutView: View {
         }
     }
 
+    private var fundingSection: some View {
+        aboutCard {
+            VStack(alignment: .leading, spacing: 10) {
+                if fundingStore.isComplete {
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("thanks to everyone who chipped in. purge is signed now.")
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Spacer(minLength: 0)
+
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(AppStyle.safe)
+                            .accessibilityHidden(true)
+                    }
+                } else {
+                    Text("Help get Purge signed")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+
+                    Text("purge is unsigned, so macOS throws that scary 'unidentified developer' warning on first open. chip in toward the $99/yr apple developer fee and i can sign it so installs are clean.")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    fundingProgressBar
+
+                    HStack(alignment: .center, spacing: 8) {
+                        Text("$\(Int(fundingStore.info.raised)) of $99 (first year)")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.tertiary)
+                            .monospacedDigit()
+
+                        Spacer(minLength: 0)
+
+                        Button {
+                            if let url = fundingPaymentURL {
+                                NSWorkspace.shared.open(url)
+                            }
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: "cup.and.saucer.fill")
+                                    .font(.system(size: 11, weight: .medium))
+                                Text("contribute")
+                                    .font(.system(size: 12, weight: .medium))
+                            }
+                            .foregroundStyle(AppStyle.accent)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(AppStyle.accent.opacity(0.1), in: Capsule(style: .continuous))
+                            .overlay {
+                                Capsule(style: .continuous)
+                                    .strokeBorder(AppStyle.accent.opacity(0.22), lineWidth: 0.5)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Contribute toward signing Purge")
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 18)
+        }
+    }
+
+    private var fundingProgressBar: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .fill(Color.primary.opacity(0.08))
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .fill(AppStyle.accent.opacity(0.85))
+                    .frame(width: max(0, geo.size.width * fundingStore.progress))
+            }
+        }
+        .frame(height: 4)
+        .accessibilityLabel("Developer fee progress")
+        .accessibilityValue("\(Int(fundingStore.progress * 100)) percent")
+    }
+
+    private var fundingPaymentURL: URL? {
+        let raw = fundingStore.info.paymentURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !raw.isEmpty,
+           raw != "REPLACE_WITH_PAYMENT_LINK",
+           let url = URL(string: raw) {
+            return url
+        }
+        return buyMeACoffeeURL
+    }
+
     private var actionCardSection: some View {
         aboutCard {
             VStack(spacing: 0) {
@@ -147,12 +245,6 @@ struct AboutView: View {
 
                 AboutActionRow(icon: "lightbulb.fill", label: "Request a feature") {
                     NSWorkspace.shared.open(featureRequestURL)
-                }
-
-                InsetCardDivider()
-
-                AboutActionRow(icon: "cup.and.saucer.fill", label: "Buy me a coffee") {
-                    NSWorkspace.shared.open(buyMeACoffeeURL)
                 }
 
                 InsetCardDivider()
