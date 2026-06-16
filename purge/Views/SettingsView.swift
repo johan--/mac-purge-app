@@ -443,6 +443,7 @@ struct SettingsView: View {
 
     private func nextCleanStatusRow(referenceDate: Date) -> some View {
         let isDueToday = Calendar.current.isDate(nextScheduledCleanDate, inSameDayAs: referenceDate)
+        let display = nextCleanDisplay(referenceDate: referenceDate)
 
         return HStack(alignment: .top, spacing: 10) {
             Image(systemName: "calendar")
@@ -456,23 +457,19 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 scheduleStatusLabel("Next clean", showsDueDot: isDueToday)
 
-                Text(primaryNextCleanDateText(referenceDate: referenceDate))
+                Text(display.primary)
                     .font(scheduleStatusPrimaryFont)
                     .foregroundStyle(.primary)
                     .contentTransition(scheduleTextTransition)
-                    .animation(
-                        scheduleTextAnimation,
-                        value: primaryNextCleanDateText(referenceDate: referenceDate)
-                    )
+                    .animation(scheduleTextAnimation, value: display.primary)
 
-                Text(relativeDateText(for: nextScheduledCleanDate, referenceDate: referenceDate))
-                    .font(scheduleStatusTertiaryFont)
-                    .foregroundStyle(.tertiary)
-                    .contentTransition(scheduleTextTransition)
-                    .animation(
-                        scheduleTextAnimation,
-                        value: relativeDateText(for: nextScheduledCleanDate, referenceDate: referenceDate)
-                    )
+                if let secondary = display.secondary {
+                    Text(secondary)
+                        .font(scheduleStatusTertiaryFont)
+                        .foregroundStyle(.tertiary)
+                        .contentTransition(scheduleTextTransition)
+                        .animation(scheduleTextAnimation, value: secondary)
+                }
             }
         }
     }
@@ -617,10 +614,32 @@ struct SettingsView: View {
         Task { await prefs.setEnabled(true, animation: scheduleLayoutAnimation) }
     }
 
-    private func primaryNextCleanDateText(referenceDate: Date) -> String {
-        Calendar.current.isDate(nextScheduledCleanDate, inSameDayAs: referenceDate)
-            ? "Today"
-            : formattedDate(nextScheduledCleanDate)
+    /// Two complementary descriptions of the next-clean date: a prominent line and a
+    /// faded supporting line. When the date is a named day (Today/Tomorrow/Yesterday)
+    /// the friendly word leads and the exact date supports it; otherwise the exact
+    /// date leads and the relative distance supports it. This guarantees the two
+    /// lines never read the same, so a clean due today no longer shows "Today" twice.
+    private func nextCleanDisplay(referenceDate: Date) -> (primary: String, secondary: String?) {
+        let date = nextScheduledCleanDate
+        let absolute = formattedDate(date)
+        let relative = relativeDateText(for: date, referenceDate: referenceDate)
+
+        if isNamedRelativeDay(date, referenceDate: referenceDate) {
+            return (primary: relative, secondary: absolute)
+        }
+        return (primary: absolute, secondary: relative)
+    }
+
+    /// Whether `relativeDateText` would render `date` as Today, Tomorrow, or
+    /// Yesterday relative to `referenceDate`. Mirrors that helper's calendar logic.
+    private func isNamedRelativeDay(_ date: Date, referenceDate: Date) -> Bool {
+        let calendar = Calendar.current
+        if calendar.isDate(date, inSameDayAs: referenceDate) { return true }
+        if let tomorrow = calendar.date(byAdding: .day, value: 1, to: referenceDate),
+           calendar.isDate(date, inSameDayAs: tomorrow) { return true }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: referenceDate),
+           calendar.isDate(date, inSameDayAs: yesterday) { return true }
+        return false
     }
 
     private func formattedDate(_ date: Date) -> String {

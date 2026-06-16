@@ -40,15 +40,27 @@ final class ScheduledCleaningRegistrar {
         }
     }
 
-    /// Single source of truth for the next scheduled clean.
-    /// Anchor priority: the last actual clean wins; before any clean, fall back to
-    /// `enabledAt`; live `now` is only a last resort.
-    func nextCleanDate(referenceDate now: Date = Date()) -> Date {
-        let anchor = ScheduledCleaningRegistrar.lastGraceSweepDate
+    /// Anchor the schedule hangs off of. The last actual clean wins; before any
+    /// clean, fall back to when auto-clean was enabled; live `now` is the last
+    /// resort. Shared by `nextCleanDate` and the due check so the displayed date
+    /// and the activation sweep can never disagree.
+    private func scheduleAnchor(referenceDate now: Date) -> Date {
+        ScheduledCleaningRegistrar.lastGraceSweepDate
             ?? ScheduledCleaningPreferenceStore.shared.enabledAt
             ?? now
+    }
+
+    /// The moment the next clean becomes due (anchor + one interval), without the
+    /// clamp `nextCleanDate` applies for display.
+    private func dueDate(referenceDate now: Date) -> Date {
         let interval = ScheduledCleaningPreferenceStore.shared.frequency.repeatIntervalSeconds
-        let candidate = anchor.addingTimeInterval(interval)
+        return scheduleAnchor(referenceDate: now).addingTimeInterval(interval)
+    }
+
+    /// Single source of truth for the next scheduled clean, clamped to `now` once
+    /// it is overdue so the UI never shows a past date.
+    func nextCleanDate(referenceDate now: Date = Date()) -> Date {
+        let candidate = dueDate(referenceDate: now)
         return candidate < now ? now : candidate
     }
 
@@ -81,17 +93,17 @@ final class ScheduledCleaningRegistrar {
         }
     }
 
-    /// Runs cleanup at most once per frequency interval whenever the window is foregrounded.
+    /// Runs cleanup whenever the app is foregrounded past the next due date.
+    /// macOS has no background scheduling, so this lazy sweep — fired on launch and
+    /// on every activation — is what actually executes the schedule. Anchored to the
+    /// same due date the UI shows, so an overdue clean runs the next time Purge opens.
     func runGracefulActivationSweepIfPastDue(referenceDate now: Date = Date()) async {
         guard ScheduledCleaningPreferenceStore.shared.isEnabled else { return }
         guard let store else { return }
-
-        let prefs = ScheduledCleaningPreferenceStore.shared
-        let last = UserDefaults.standard.object(forKey: Self.lastGraceSweepKey) as? Date ?? .distantPast
-        guard now.timeIntervalSince(last) >= prefs.frequency.repeatIntervalSeconds else { return }
+        guard now >= dueDate(referenceDate: now) else { return }
 
         _ = await store.performScheduledClean(referenceDate: now)
-        UserDefaults.standard.set(Date(), forKey: Self.lastGraceSweepKey)
+        UserDefaults.standard.set(now, forKey: Self.lastGraceSweepKey)
 
         Task { await applyScheduleFromPrefs() }
     }

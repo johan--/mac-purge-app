@@ -29,7 +29,7 @@ struct ContentView: View {
             detailColumn
         }
         .task {
-            await scanIfNeeded()
+            await runStartupMaintenance()
         }
         .onChange(of: scenePhase) { phase in
             guard isLifecycleActive, phase == .active, !isRunningPreview else { return }
@@ -39,7 +39,7 @@ struct ContentView: View {
         }
         .onChange(of: isLifecycleActive) { isActive in
             guard isActive else { return }
-            Task { await scanIfNeeded() }
+            Task { await runStartupMaintenance() }
         }
         .sheet(isPresented: $store.showDeletionSheet) {
             DeletionConfirmSheet(
@@ -190,6 +190,16 @@ struct ContentView: View {
         guard isLifecycleActive, !isRunningPreview else { return }
         guard store.hasFullDiskAccess, store.cacheItems.isEmpty, store.devTools.isEmpty, store.projectGroups.isEmpty else { return }
         await store.scanAll()
+    }
+
+    /// Runs any past-due scheduled clean before the first scan so the UI reflects
+    /// the post-clean state. `.onChange(of: scenePhase)` never fires for the initial
+    /// `.active` value, so without this a cold launch would skip the activation
+    /// sweep entirely and an overdue clean would sit unexecuted.
+    private func runStartupMaintenance() async {
+        guard isLifecycleActive, !isRunningPreview else { return }
+        await ScheduledCleaningRegistrar.shared.runGracefulActivationSweepIfPastDue()
+        await scanIfNeeded()
     }
 
     private func completeInteractiveSafeCleanupCelebration() {
