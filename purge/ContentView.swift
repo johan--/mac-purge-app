@@ -361,6 +361,7 @@ struct ContentView: View {
                 )
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .underDetailPageHeader(includesSubtitle: true)
     }
 
@@ -384,6 +385,7 @@ struct ContentView: View {
                 )
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .underDetailPageHeader(includesSubtitle: true)
     }
 

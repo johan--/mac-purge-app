@@ -1168,10 +1168,10 @@ private extension View {
         self
             .background(
                 AppStyle.elevated,
-                in: RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
+                in: RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
             )
             .overlay {
-                RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
+                RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
                     .stroke(AppStyle.hairline, lineWidth: 0.5)
             }
     }

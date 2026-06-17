@@ -385,7 +385,7 @@ struct ScanRowCardChrome: ViewModifier {
         if showsCardChrome {
             content
                 .background(Color.primary.opacity(0.05))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous))
                 .opacity(canSelectForBulk ? 1 : 0.55)
         } else {
             content

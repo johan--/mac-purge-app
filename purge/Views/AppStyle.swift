@@ -5,7 +5,7 @@ enum AppStyle {
     enum Radius {
         static let chip: CGFloat = 6
         static let control: CGFloat = 8
-        static let panel: CGFloat = 10
+        static let panel: CGFloat = 12
         static let card: CGFloat = 14
     }
 

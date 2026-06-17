@@ -456,7 +456,7 @@ private struct LargeFileRow: View {
 
     private var rowMainContent: some View {
         HStack(alignment: .center, spacing: 12) {
-            AdaptiveBrandIconImage(source: .sfSymbol(file.category.symbolName))
+            LargeFileThumbnailIcon(file: file)
 
             VStack(alignment: .leading, spacing: 4) {
                 Button(action: quickLook) {
@@ -501,6 +501,99 @@ private struct LargeFileRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Leading icon for a Large File row: a QuickLook thumbnail when one can be generated,
+/// otherwise the category icon with a small extension badge. The fallback renders immediately so
+/// scrolling never blocks; the thumbnail loads off the main thread and fades in once ready, and
+/// `.task` cancels in-flight generation when the row scrolls off-screen.
+private struct LargeFileThumbnailIcon: View {
+    let file: LargeFile
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.displayScale) private var displayScale
+
+    @State private var thumbnail: NSImage?
+
+    private let slotSize = AppStyle.Row.listIconFrameSize
+    private let cornerRadius: CGFloat = 6
+
+    private var cacheKey: String {
+        LargeFileThumbnailService.cacheKey(path: file.id, modified: file.lastUsed)
+    }
+
+    private var fileExtension: String {
+        file.path.pathExtension.lowercased()
+    }
+
+    var body: some View {
+        ZStack {
+            fallbackIcon
+                .opacity(thumbnail == nil ? 1 : 0)
+
+            if let thumbnail {
+                Image(nsImage: thumbnail)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: slotSize, height: slotSize)
+                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .strokeBorder(AppStyle.hairline, lineWidth: 0.5)
+                    }
+                    .transition(.opacity)
+            }
+        }
+        .frame(width: slotSize, height: slotSize)
+        .task(id: cacheKey) {
+            await loadThumbnail()
+        }
+    }
+
+    private var fallbackIcon: some View {
+        AdaptiveBrandIconImage(source: .sfSymbol(file.category.symbolName))
+            .overlay(alignment: .bottomTrailing) {
+                extensionBadge
+            }
+    }
+
+    @ViewBuilder
+    private var extensionBadge: some View {
+        if !fileExtension.isEmpty {
+            Text(".\(fileExtension)")
+                .font(.system(size: 8, weight: .semibold))
+                .lineLimit(1)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 3)
+                .padding(.vertical, 1)
+                .background(Capsule(style: .continuous).fill(.regularMaterial))
+                .overlay(Capsule(style: .continuous).strokeBorder(AppStyle.hairline, lineWidth: 0.5))
+                .fixedSize()
+        }
+    }
+
+    private func loadThumbnail() async {
+        let key = cacheKey
+
+        if let cached = LargeFileThumbnailService.shared.cachedThumbnail(forKey: key) {
+            thumbnail = cached
+            return
+        }
+
+        let scale = displayScale > 0 ? displayScale : 2
+        let image = await LargeFileThumbnailService.shared.thumbnail(
+            for: file.path.standardizedFileURL,
+            key: key,
+            pointSize: slotSize,
+            scale: scale
+        )
+
+        guard !Task.isCancelled, let image else { return }
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
+            thumbnail = image
+        }
     }
 }
 
