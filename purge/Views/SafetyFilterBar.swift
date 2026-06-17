@@ -57,9 +57,9 @@ enum SafetyFilter: String, CaseIterable, Identifiable {
 
     func chipIconColor(isSelected: Bool) -> Color {
         switch self {
-        case .all: return isSelected ? AppStyle.accent : .secondary
-        case .safe: return AppStyle.safe
-        case .checkFirst: return AppStyle.warning
+        case .all: return isSelected ? AppColors.textPrimary : .secondary
+        case .safe: return AppColors.tagSafeText
+        case .checkFirst: return AppColors.tagCheckText
         }
     }
 }
@@ -125,6 +125,7 @@ struct TriStateCheckbox: NSViewRepresentable {
     func makeNSView(context: Context) -> NSButton {
         let button = NSButton(checkboxWithTitle: title, target: context.coordinator, action: #selector(Coordinator.toggled))
         button.allowsMixedState = true
+        button.contentTintColor = AppColors.controlAccentNSColor
         button.setContentHuggingPriority(.required, for: .vertical)
         button.setContentHuggingPriority(.required, for: .horizontal)
         button.setContentCompressionResistancePriority(.required, for: .vertical)
@@ -135,6 +136,7 @@ struct TriStateCheckbox: NSViewRepresentable {
         context.coordinator.action = action
         button.title = title
         button.isEnabled = isEnabled
+        button.contentTintColor = AppColors.controlAccentNSColor
         switch state {
         case .none: button.state = .off
         case .mixed: button.state = .mixed
@@ -176,7 +178,7 @@ struct FilterSortToolbar: View {
     }
 
     private var activeChipFill: Color {
-        AppStyle.selectionFill
+        AppColors.bgElevated
     }
 
     var body: some View {
@@ -257,33 +259,33 @@ struct FilterSortToolbar: View {
             select(filter)
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: filter.chipSymbolName(isSelected: isOn))
-                    .imageScale(.small)
-                    .foregroundStyle(filter.chipIconColor(isSelected: isOn))
-                    .accessibilityHidden(true)
-                Text(filter.displayName)
-                    .lineLimit(1)
+                AppChipIcon(
+                    systemName: filter.chipSymbolName(isSelected: isOn),
+                    color: filter.chipIconColor(isSelected: isOn)
+                )
+                AppChipTitle(text: filter.displayName, isSelected: isOn)
                 Text("\(count)")
                     .font(.callout.weight(.medium))
                     .monospacedDigit()
                     .contentTransition(reduceMotion ? .identity : .numericText())
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: count)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: count)
                     .foregroundStyle(.tertiary)
             }
-            .font(.system(size: 13, weight: isOn ? .semibold : .regular))
+            .font(.system(size: 13))
             .padding(.horizontal, 9)
             .padding(.vertical, 4)
             .background {
-                RoundedRectangle(cornerRadius: AppStyle.Radius.chip, style: .continuous)
+                Capsule()
                     .fill(isOn ? activeChipFill : Color.clear)
             }
             .overlay {
-                RoundedRectangle(cornerRadius: AppStyle.Radius.chip, style: .continuous)
-                    .stroke(isOn ? AppStyle.selectionStroke : AppStyle.hairline)
+                Capsule()
+                    .stroke(AppColors.borderSubtle)
             }
             .foregroundStyle(isOn ? Color.primary : Color.secondary)
             .opacity(count == 0 && !isOn ? 0.45 : 1.0)
-            .contentShape(Rectangle())
+            .contentShape(Capsule())
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isOn)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(filter.displayName), \(count) items")
@@ -296,8 +298,9 @@ struct FilterSortToolbar: View {
         if reduceMotion {
             safetyFilter = filter
         } else {
-            withAnimation(.easeInOut(duration: 0.15)) {
+            withAnimation(.easeInOut(duration: 0.5)) {
                 safetyFilter = filter
+
             }
         }
     }

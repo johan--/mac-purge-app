@@ -553,7 +553,7 @@ struct DevToolsView<PageHeader: View>: View {
                 standardBody
             }
         }
-        .background(AppStyle.canvas)
+        .background(AppColors.bgBase)
     }
 
     private var standardBody: some View {
@@ -809,7 +809,7 @@ struct DevToolsView<PageHeader: View>: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .background(AppStyle.canvas)
+        .background(AppColors.bgBase)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: store.interactiveSafeCleanupRemovedPaths)
         .animation(rowInsertionAnimation, value: developerTotalRowCount)
         .animation(expandCollapseAnimation, value: iosSimulatorsExpanded)
@@ -900,7 +900,7 @@ struct DevToolsView<PageHeader: View>: View {
             .frame(width: 24)
 
             Circle()
-                .fill(parentInfo.level == .safe ? AppStyle.safe : parentInfo.level == .danger ? AppStyle.danger : AppStyle.warning)
+                .fill(parentInfo.level == .safe ? AppColors.tagSafeText : parentInfo.level == .danger ? AppColors.tagDangerText : AppColors.tagCheckText)
                 .frame(width: 6, height: 6)
 
             Image(systemName: "ipad.and.iphone")
@@ -1167,12 +1167,12 @@ private extension View {
     func devToolsGroupCardChrome() -> some View {
         self
             .background(
-                AppStyle.elevated,
+                AppColors.bgElevated,
                 in: RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
-                    .stroke(AppStyle.hairline, lineWidth: 0.5)
+                    .stroke(AppColors.borderSubtle, lineWidth: 0.5)
             }
     }
 }

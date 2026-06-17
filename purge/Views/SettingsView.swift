@@ -45,7 +45,7 @@ struct SettingsView: View {
         .padding(.bottom, AppDetailPageLayout.verticalPadding)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .frame(maxHeight: usesExternalScrollContainer ? nil : .infinity, alignment: .topLeading)
-        .background(AppStyle.canvas)
+        .background(AppColors.bgBase)
         .onChange(of: devToolsStalenessThresholdRaw) { _ in
             Task { await store.scanAll() }
         }
@@ -138,7 +138,7 @@ struct SettingsView: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(AppStyle.accent)
+                .tint(AppColors.textPrimary)
                 .disabled(isTelemetrySendDisabled)
             }
 
@@ -239,6 +239,7 @@ struct SettingsView: View {
 
                     Toggle("Run automatic cleaning", isOn: autoCleanEnabledBinding)
                         .toggleStyle(.switch)
+                        .tint(AppColors.tagSafeText)
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
@@ -247,6 +248,7 @@ struct SettingsView: View {
 
                     Toggle("Run automatic cleaning", isOn: autoCleanEnabledBinding)
                         .toggleStyle(.switch)
+                        .tint(AppColors.tagSafeText)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -388,7 +390,7 @@ struct SettingsView: View {
         ViewThatFits(in: .horizontal) {
             HStack {
                 Text(title)
-                    .foregroundStyle(AppStyle.formLabel)
+                    .foregroundStyle(AppColors.textSecondary)
 
                 Spacer(minLength: 12)
 
@@ -402,7 +404,7 @@ struct SettingsView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
-                    .foregroundStyle(AppStyle.formLabel)
+                    .foregroundStyle(AppColors.textSecondary)
 
                 SettingsMenuPicker(
                     selection: selection,
@@ -482,7 +484,7 @@ struct SettingsView: View {
 
             if showsDueDot {
                 Circle()
-                    .fill(AppStyle.accent)
+                    .fill(AppColors.textPrimary)
                     .frame(width: 5, height: 5)
                     .accessibilityHidden(true)
             }
@@ -497,7 +499,7 @@ struct SettingsView: View {
         Button(action: action) {
             Text(title)
                 .font(scheduleStatusLinkFont)
-                .foregroundStyle(AppStyle.accent)
+                .foregroundStyle(AppColors.textPrimary)
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
@@ -538,12 +540,12 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 0, content: content)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                AppStyle.elevated,
+                AppColors.bgElevated,
                 in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                    .strokeBorder(AppStyle.hairline, lineWidth: 0.5)
+                    .strokeBorder(AppColors.borderSubtle, lineWidth: 0.5)
             }
     }
 
@@ -731,7 +733,7 @@ private struct TelemetryPreviewSheet: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(AppStyle.accent)
+                .tint(AppColors.textPrimary)
                 .keyboardShortcut(.defaultAction)
                 .disabled(isSendDisabled || isSending)
             }
@@ -806,12 +808,12 @@ private struct SettingsPickerButtonStyle: ButtonStyle {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(
-                configuration.isPressed ? AppStyle.rowHover : AppStyle.controlFill,
+                configuration.isPressed ? AppColors.bgElevated : AppColors.bgOverlay,
                 in: RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
-                    .strokeBorder(AppStyle.hairline, lineWidth: 0.5)
+                    .strokeBorder(AppColors.borderSubtle, lineWidth: 0.5)
             }
             .opacity(isEnabled ? 1 : 0.45)
     }
@@ -836,7 +838,7 @@ private struct AppearanceOptionButton: View {
                         if isSelected {
                             RoundedRectangle(cornerRadius: 7, style: .continuous)
                                 .inset(by: -3)
-                                .strokeBorder(AppStyle.accent, lineWidth: 2)
+                                .strokeBorder(AppColors.textPrimary, lineWidth: 2)
                         }
                     }
 

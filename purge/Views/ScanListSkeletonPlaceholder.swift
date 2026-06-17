@@ -127,7 +127,7 @@ struct ScanListSkeletonPlaceholder: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .background(AppStyle.canvas)
+        .background(AppColors.bgBase)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Loading results")
     }

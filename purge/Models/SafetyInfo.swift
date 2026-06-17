@@ -27,10 +27,10 @@ enum SafetyLevel: String, CaseIterable, Codable, Hashable {
 
     var color: Color {
         switch self {
-        case .safe: return .green
-        case .medium: return .orange
-        case .danger: return .red
-        case .unknown: return .gray
+        case .safe: return AppColors.tagSafeText
+        case .medium: return AppColors.tagCheckText
+        case .danger: return AppColors.tagDangerText
+        case .unknown: return AppColors.tagUnsureText
         }
     }
 

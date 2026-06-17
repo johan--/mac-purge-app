@@ -27,6 +27,7 @@ struct PermissionPromptView: View {
                     NSWorkspace.shared.open(url)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(AppColors.buttonPrimaryBg)
 
                 Button("I've Granted Access", action: onRefresh)
             }

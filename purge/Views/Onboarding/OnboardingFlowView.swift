@@ -19,7 +19,7 @@ struct OnboardingFlowView: View {
 
   var body: some View {
   ZStack {
-    AppStyle.canvas
+    AppColors.bgBase
       .ignoresSafeArea()
 
     VStack(spacing: 0) {
@@ -57,7 +57,7 @@ struct OnboardingFlowView: View {
     minWidth: AppWindowLayout.width,
     minHeight: AppWindowLayout.minHeight
   )
-  .tint(AppStyle.accent)
+  .tint(AppColors.textPrimary)
   .onChange(of: scenePhase) { phase in
     guard phase == .active, step == .permissions else { return }
     store.refreshPermission()

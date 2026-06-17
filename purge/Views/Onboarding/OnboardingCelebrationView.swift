@@ -12,7 +12,7 @@ struct OnboardingCelebrationView: View {
 
       Image(systemName: "sparkles")
         .font(.system(size: 44, weight: .semibold))
-        .foregroundStyle(AppStyle.accent)
+        .foregroundStyle(AppColors.textPrimary)
         .symbolRenderingMode(.hierarchical)
         .accessibilityHidden(true)
 
@@ -58,7 +58,7 @@ struct OnboardingCelebrationView: View {
     .padding(.horizontal, OnboardingLayout.horizontalPadding)
     .padding(.vertical, OnboardingLayout.verticalPadding)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(AppStyle.canvas)
+    .background(AppColors.bgBase)
     .onAppear {
       if freedBytes > 0 {
         withAnimation(.easeOut(duration: 0.85)) {

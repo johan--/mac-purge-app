@@ -142,6 +142,7 @@ struct ScanResultRow: View {
                 Toggle("", isOn: $isSelected)
                     .labelsHidden()
                     .toggleStyle(.checkbox)
+                    .tint(AppColors.buttonPrimaryBg)
             }
 
             if canTapRowToToggleSelection {

@@ -276,7 +276,7 @@ struct CleaningButtonLabel: View {
     let title: String
     let systemImage: String?
     var isCleaning: Bool = false
-    var spinnerTint: Color = AppStyle.accent
+    var spinnerTint: Color = AppColors.textPrimary
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -334,7 +334,7 @@ struct SafeCleanupCelebrationOverlay: View {
     private static let confettiThresholdBytes: Int64 = 2 * 1024 * 1024 * 1024
     private static let minimumCleaningDwell: TimeInterval = 1.2
 
-    private let celebrationAccent = AppStyle.accent
+    private let celebrationAccent = AppColors.textPrimary
     private let sheetBackground = Color(
         light: NSColor(calibratedWhite: 0.08, alpha: 1),
         dark: NSColor(calibratedWhite: 0.08, alpha: 1)
@@ -1103,22 +1103,22 @@ struct AppButtonStyle: ButtonStyle {
         case .bordered, .ghost:
             return .primary
         case .filled:
-            return .white
+            return AppColors.buttonPrimaryText
         case .destructive:
-            return AppStyle.danger
+            return AppColors.tagDangerText
         }
     }
 
     private func background(configuration: Configuration) -> Color {
         switch variant {
         case .bordered:
-            return configuration.isPressed ? AppStyle.rowHover : AppStyle.elevated
+            return configuration.isPressed ? AppColors.bgOverlay : AppColors.bgElevated
         case .filled:
-            return AppStyle.accent
+            return AppColors.buttonPrimaryBg
         case .ghost:
-            return configuration.isPressed ? AppStyle.rowHover : .clear
+            return configuration.isPressed ? AppColors.bgOverlay : .clear
         case .destructive:
-            return AppStyle.danger.opacity(configuration.isPressed ? 0.18 : 0.1)
+            return AppColors.tagDangerText.opacity(configuration.isPressed ? 0.18 : 0.1)
         }
     }
 
@@ -1126,11 +1126,45 @@ struct AppButtonStyle: ButtonStyle {
     private var border: some View {
         if isCapsule {
             Capsule(style: .continuous)
-                .stroke(variant == .filled ? Color.clear : AppStyle.hairline)
+                .stroke(variant == .filled ? Color.clear : AppColors.buttonSecondaryBorder)
         } else {
             RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
-                .stroke(variant == .filled ? Color.clear : AppStyle.hairline)
+                .stroke(variant == .filled ? Color.clear : AppColors.buttonSecondaryBorder)
         }
+    }
+}
+
+/// Chip title that reserves semibold width so selection doesn't shift neighbors.
+struct AppChipTitle: View {
+    let text: String
+    var isSelected: Bool
+    var size: CGFloat = 13
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            Text(text)
+                .font(.system(size: size, weight: .semibold))
+                .opacity(0)
+                .accessibilityHidden(true)
+            Text(text)
+                .font(.system(size: size, weight: isSelected ? .semibold : .regular))
+        }
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
+/// Fixed icon slot so filled/outline SF Symbols don't shift chip layout.
+struct AppChipIcon: View {
+    let systemName: String
+    var color: Color
+
+    var body: some View {
+        Image(systemName: systemName)
+            .imageScale(.small)
+            .foregroundStyle(color)
+            .frame(width: 14, height: 14)
+            .accessibilityHidden(true)
     }
 }
 
@@ -1161,38 +1195,97 @@ struct AppBadge: View {
 
     private var foregroundColor: Color {
         switch tone {
-        case .accent: return .white
-        default: return color
+        case .accent: return AppColors.textSecondary
+        case .neutral: return AppColors.tagUnsureText
+        case .safe: return AppColors.tagSafeText
+        case .warning: return AppColors.tagCheckText
+        case .danger: return AppColors.tagDangerText
         }
     }
 
     private var backgroundColor: Color {
         switch tone {
-        case .accent: return AppStyle.accent
-        case .neutral:
-            return Color(
-                light: NSColor.black.withAlphaComponent(0.06),
-                dark: NSColor.white.withAlphaComponent(0.1)
-            )
-        default: return color.opacity(0.12)
+        case .accent: return AppColors.bgElevated
+        case .neutral: return AppColors.tagUnsureBg
+        case .safe: return AppColors.tagSafeBg
+        case .warning: return AppColors.tagCheckBg
+        case .danger: return AppColors.tagDangerBg
         }
     }
 
     private var borderColor: Color {
         switch tone {
-        case .accent: return AppStyle.accent.opacity(0.85)
-        case .neutral: return AppStyle.hairline
-        default: return color.opacity(0.22)
+        case .accent: return AppColors.borderSubtle
+        case .neutral: return AppColors.tagUnsureText.opacity(0.22)
+        case .safe: return AppColors.tagSafeText.opacity(0.22)
+        case .warning: return AppColors.tagCheckText.opacity(0.22)
+        case .danger: return AppColors.tagDangerText.opacity(0.22)
+        }
+    }
+}
+
+/// Drives the outline→filled swap on the selected sidebar icon. The selected row
+/// owns the only animated state change; deselection is applied in a nil transaction
+/// so the previous row does not play the same replacement effect in reverse.
+private struct AppNavIcon: View {
+    let systemImage: String
+    let isSelected: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var fillProgress: Double?
+
+    var body: some View {
+        ZStack {
+            Image(systemName: systemImage)
+                .opacity(1 - currentFillProgress)
+
+            Image(systemName: filledSystemImage)
+                .opacity(currentFillProgress)
+                .scaleEffect(0.86 + (0.14 * currentFillProgress))
+        }
+        .font(.system(size: 13, weight: .medium))
+        .frame(width: 16)
+        .foregroundStyle(isSelected ? AppColors.textPrimary : .secondary)
+            .onAppear {
+                fillProgress = isSelected ? 1 : 0
+            }
+            .onChange(of: isSelected) { selected in
+                updateFillProgress(isSelected: selected)
+            }
+            .onChange(of: systemImage) { _ in
+                setFillProgressWithoutAnimation(isSelected ? 1 : 0)
+            }
+    }
+
+    private var currentFillProgress: Double {
+        fillProgress ?? (isSelected ? 1 : 0)
+    }
+
+    private var filledSystemImage: String {
+        "\(systemImage).fill"
+    }
+
+    private func updateFillProgress(isSelected selected: Bool) {
+        guard !reduceMotion else {
+            setFillProgressWithoutAnimation(selected ? 1 : 0)
+            return
+        }
+
+        if selected {
+            setFillProgressWithoutAnimation(0)
+            withAnimation(.snappy(duration: 0.36)) {
+                fillProgress = 1
+            }
+        } else {
+            setFillProgressWithoutAnimation(0)
         }
     }
 
-    private var color: Color {
-        switch tone {
-        case .neutral: return AppStyle.formLabel
-        case .accent: return AppStyle.accent
-        case .safe: return AppStyle.safe
-        case .warning: return AppStyle.warning
-        case .danger: return AppStyle.danger
+    private func setFillProgressWithoutAnimation(_ progress: Double) {
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            fillProgress = progress
         }
     }
 }
@@ -1208,16 +1301,13 @@ struct AppNavRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: AppStyle.Spacing.xSmall) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 13, weight: .medium))
-                    .frame(width: 16)
-                    .foregroundStyle(isSelected ? AppStyle.accent : .secondary)
+                AppNavIcon(systemImage: systemImage, isSelected: isSelected)
                 Text(title)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
                     .lineLimit(1)
                 Spacer(minLength: AppStyle.Spacing.xSmall)
             }
-            .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+            .foregroundStyle(isSelected ? AppColors.textPrimary : Color.secondary)
             .padding(.horizontal, SidebarLayout.navRowInnerPadding)
             .padding(.vertical, 6)
             .background(navBackground, in: RoundedRectangle(cornerRadius: SidebarLayout.selectionCornerRadius, style: .continuous))
@@ -1230,10 +1320,10 @@ struct AppNavRow: View {
 
     private var navBackground: Color {
         if isSelected {
-            return AppStyle.accent.opacity(0.12)
+            return AppColors.bgElevated
         }
         if isHovering {
-            return AppStyle.rowHover
+            return AppColors.bgOverlay
         }
         return .clear
     }

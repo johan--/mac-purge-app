@@ -28,7 +28,7 @@ struct AboutView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .top)
-        .background(AppStyle.canvas)
+        .background(AppColors.bgBase)
     }
 
     private var aboutScrollContent: some View {
@@ -155,7 +155,7 @@ struct AboutView: View {
 
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(AppStyle.safe)
+                            .foregroundStyle(AppColors.tagSafeText)
                             .accessibilityHidden(true)
                     }
                 } else {
@@ -189,13 +189,13 @@ struct AboutView: View {
                                 Text("contribute")
                                     .font(.system(size: 12, weight: .medium))
                             }
-                            .foregroundStyle(AppStyle.accent)
+                            .foregroundStyle(AppColors.textPrimary)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
-                            .background(AppStyle.accent.opacity(0.1), in: Capsule(style: .continuous))
+                            .background(AppColors.bgElevated, in: Capsule(style: .continuous))
                             .overlay {
                                 Capsule(style: .continuous)
-                                    .strokeBorder(AppStyle.accent.opacity(0.22), lineWidth: 0.5)
+                                    .strokeBorder(AppColors.borderSubtle, lineWidth: 0.5)
                             }
                         }
                         .buttonStyle(.plain)
@@ -215,7 +215,7 @@ struct AboutView: View {
                 RoundedRectangle(cornerRadius: 3, style: .continuous)
                     .fill(Color.primary.opacity(0.08))
                 RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .fill(AppStyle.accent.opacity(0.85))
+                    .fill(AppColors.textPrimary.opacity(0.85))
                     .frame(width: max(0, geo.size.width * fundingStore.progress))
             }
         }
@@ -303,12 +303,12 @@ struct AboutView: View {
         VStack(alignment: .leading, spacing: 0, content: content)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                AppStyle.elevated,
+                AppColors.bgElevated,
                 in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                    .strokeBorder(AppStyle.hairline, lineWidth: 0.5)
+                    .strokeBorder(AppColors.borderSubtle, lineWidth: 0.5)
             }
     }
 

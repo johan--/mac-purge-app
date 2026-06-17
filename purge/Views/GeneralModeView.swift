@@ -145,7 +145,7 @@ struct AppCachesView<PageHeader: View>: View {
                 standardBody
             }
         }
-        .background(AppStyle.canvas)
+        .background(AppColors.bgBase)
     }
 
     private var standardBody: some View {
@@ -308,7 +308,7 @@ struct AppCachesView<PageHeader: View>: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .background(AppStyle.canvas)
+        .background(AppColors.bgBase)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: store.interactiveSafeCleanupRemovedPaths)
         .animation(rowInsertionAnimation, value: items.map(\.id))
     }

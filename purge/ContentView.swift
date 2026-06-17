@@ -153,7 +153,7 @@ struct ContentView: View {
         .frame(width: AppWindowLayout.width)
         .frame(minHeight: AppWindowLayout.minHeight)
         .fixedAppWindowWidth()
-        .tint(AppStyle.accent)
+        .tint(AppColors.textPrimary)
         .modifier(DiskSummaryRefreshModifier())
     }
 
@@ -161,7 +161,7 @@ struct ContentView: View {
     /// separator NavigationSplitView used to draw.
     private var sidebarDivider: some View {
         Rectangle()
-            .fill(AppStyle.hairline)
+            .fill(AppColors.borderSubtle)
             .frame(width: 1)
             .frame(maxHeight: .infinity)
             .ignoresSafeArea(.container, edges: .top)
@@ -280,7 +280,7 @@ struct ContentView: View {
             alignment: .topLeading
         )
         .frame(width: SidebarLayout.width)
-        .background(AppStyle.panel)
+        .background(AppColors.bgCard)
         .sidebarCompactTop()
     }
 
@@ -289,7 +289,7 @@ struct ContentView: View {
     private var tabContent: some View {
         ZStack(alignment: .top) {
             ZStack {
-                AppStyle.canvas
+                AppColors.bgBase
                     .ignoresSafeArea()
 
                 tabBody
@@ -298,7 +298,7 @@ struct ContentView: View {
 
             selectedPageHeader
         }
-        .background(AppStyle.canvas)
+        .background(AppColors.bgBase)
     }
 
     @ViewBuilder
@@ -336,7 +336,7 @@ struct ContentView: View {
             SettingsView(showsPageHeader: false, usesExternalScrollContainer: true)
         }
         .scrollContentBackground(.hidden)
-        .background(AppStyle.canvas)
+        .background(AppColors.bgBase)
     }
 
     @ViewBuilder
@@ -433,7 +433,7 @@ struct ContentView: View {
             AboutView(showsPageHeader: false, usesExternalScrollContainer: true)
         }
         .scrollContentBackground(.hidden)
-        .background(AppStyle.canvas)
+        .background(AppColors.bgBase)
     }
 
     private var selectedPageHeader: some View {
@@ -662,7 +662,7 @@ struct SidebarSummaryView: View {
 
                     if safeRecoverableFraction > 0 {
                         RoundedRectangle(cornerRadius: 4)
-                            .fill(AppStyle.safe.opacity(0.5))
+                            .fill(AppColors.tagSafeBg.opacity(0.5))
                             .frame(width: safeRecoverableFraction * width, height: 8)
                             .offset(x: max(0, (usedFraction - safeRecoverableFraction) * width))
                     }
@@ -708,7 +708,7 @@ struct SidebarSummaryView: View {
             symbol: SafetyLevel.safe.symbolName(filled: true),
             label: SafetyLevel.safe.displayName,
             value: formatBytes(store.safeRecoverableBytes),
-            color: AppStyle.safe,
+            color: AppColors.tagSafeText,
             valueColor: store.safeRecoverableBytes > 0 ? .primary : .secondary,
             animationValue: store.safeRecoverableBytes,
             isValueLoading: isSafeToCleanSummaryLoading

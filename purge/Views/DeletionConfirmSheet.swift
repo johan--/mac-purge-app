@@ -274,7 +274,7 @@ struct DeletionConfirmSheet: View {
                     onConfirm()
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(AppStyle.accent)
+                .tint(AppColors.textPrimary)
             }
         }
     }

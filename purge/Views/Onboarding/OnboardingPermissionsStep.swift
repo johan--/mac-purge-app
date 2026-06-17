@@ -53,7 +53,7 @@ struct OnboardingPermissionsStep: View {
       if !store.hasFullDiskAccess {
         Text("Full Disk Access is required before your first scan.")
           .font(.caption)
-          .foregroundStyle(AppStyle.warning)
+          .foregroundStyle(AppColors.tagCheckText)
       }
 
       Spacer(minLength: 0)

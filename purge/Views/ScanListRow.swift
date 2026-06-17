@@ -84,20 +84,20 @@ struct ScanListRow<Footer: View>: View {
         .frame(minHeight: AppStyle.Row.listRowMinHeight, alignment: .leading)
         .background {
             RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
-                .fill(AppStyle.elevated)
+                .fill(AppColors.bgElevated)
                 .overlay {
                     if isSelected {
                         RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
-                            .fill(AppStyle.selectionFill)
+                            .fill(AppColors.bgOverlay)
                     } else if isHovering {
                         RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
-                            .fill(AppStyle.rowHover)
+                            .fill(AppColors.bgOverlay)
                     }
                 }
         }
         .overlay {
             RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
-                .stroke(isSelected ? AppStyle.selectionStroke : AppStyle.hairline)
+                .stroke(AppColors.borderSubtle)
         }
     }
 

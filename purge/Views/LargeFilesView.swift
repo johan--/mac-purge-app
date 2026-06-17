@@ -77,7 +77,7 @@ struct LargeFilesView: View {
                 standardBody
             }
         }
-        .background(AppStyle.canvas)
+        .background(AppColors.bgBase)
     }
 
     private var standardBody: some View {
@@ -197,7 +197,7 @@ struct LargeFilesView: View {
             )
         }
         .menuStyle(.button)
-        .buttonStyle(AppButtonStyle(variant: .bordered))
+        .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
         .fixedSize()
         .accessibilityLabel("Size filter")
         .accessibilityValue(sizeThreshold.menuButtonLabel)
@@ -224,7 +224,7 @@ struct LargeFilesView: View {
             )
         }
         .menuStyle(.button)
-        .buttonStyle(AppButtonStyle(variant: .bordered))
+        .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
         .fixedSize()
         .accessibilityLabel("Last used filter")
         .accessibilityValue(ageThreshold.menuButtonLabel)
@@ -245,34 +245,45 @@ struct LargeFilesView: View {
     private func categoryChip(id: String, title: String, systemImage: String, count: Int) -> some View {
         let isOn = categoryFilterRaw == id
         return Button {
-            categoryFilterRaw = id
+            selectCategory(id)
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: systemImage)
-                    .imageScale(.small)
-                    .foregroundStyle(isOn ? AppStyle.accent : .secondary)
-                Text(title)
-                    .lineLimit(1)
+                AppChipIcon(
+                    systemName: systemImage,
+                    color: isOn ? AppColors.textPrimary : .secondary
+                )
+                AppChipTitle(text: title, isSelected: isOn)
                 Text("\(count)")
                     .font(.callout.weight(.medium))
                     .monospacedDigit()
                     .contentTransition(reduceMotion ? .identity : .numericText())
                     .foregroundStyle(.tertiary)
             }
-            .font(.system(size: 13, weight: isOn ? .semibold : .regular))
+            .font(.system(size: 13))
             .padding(.horizontal, 9)
             .padding(.vertical, 4)
             .background {
-                RoundedRectangle(cornerRadius: AppStyle.Radius.chip, style: .continuous)
-                    .fill(isOn ? AppStyle.selectionFill : Color.clear)
+                Capsule()
+                    .fill(isOn ? AppColors.bgElevated : Color.clear)
             }
             .overlay {
-                RoundedRectangle(cornerRadius: AppStyle.Radius.chip, style: .continuous)
-                    .strokeBorder(isOn ? AppStyle.selectionStroke : Color.clear, lineWidth: 1)
+                Capsule()
+                    .strokeBorder(isOn ? AppColors.borderSubtle : Color.clear, lineWidth: 1)
             }
-            .contentShape(Rectangle())
+            .contentShape(Capsule())
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isOn)
         }
         .buttonStyle(.plain)
+    }
+
+    private func selectCategory(_ id: String) {
+        if reduceMotion {
+            categoryFilterRaw = id
+        } else {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                categoryFilterRaw = id
+            }
+        }
     }
 
     private var selectAllRowChrome: some View {
@@ -337,7 +348,7 @@ struct LargeFilesView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .background(AppStyle.canvas)
+        .background(AppColors.bgBase)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: store.largeFiles.map(\.id))
     }
 
@@ -421,6 +432,7 @@ private struct LargeFileRow: View {
             Toggle("", isOn: $isSelected)
                 .labelsHidden()
                 .toggleStyle(.checkbox)
+                .tint(AppColors.buttonPrimaryBg)
 
             Button {
                 isSelected.toggle()
@@ -541,7 +553,7 @@ private struct LargeFileThumbnailIcon: View {
                     .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .strokeBorder(AppStyle.hairline, lineWidth: 0.5)
+                            .strokeBorder(AppColors.borderSubtle, lineWidth: 0.5)
                     }
                     .transition(.opacity)
             }
@@ -569,7 +581,7 @@ private struct LargeFileThumbnailIcon: View {
                 .padding(.horizontal, 3)
                 .padding(.vertical, 1)
                 .background(Capsule(style: .continuous).fill(.regularMaterial))
-                .overlay(Capsule(style: .continuous).strokeBorder(AppStyle.hairline, lineWidth: 0.5))
+                .overlay(Capsule(style: .continuous).strokeBorder(AppColors.borderSubtle, lineWidth: 0.5))
                 .fixedSize()
         }
     }

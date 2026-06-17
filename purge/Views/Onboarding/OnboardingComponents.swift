@@ -80,9 +80,9 @@ struct OnboardingFeatureChip: View {
     VStack(spacing: 8) {
       Image(systemName: symbol)
         .font(.system(size: 22, weight: .semibold))
-        .foregroundStyle(AppStyle.accent)
+        .foregroundStyle(AppColors.textPrimary)
         .frame(width: 52, height: 52)
-        .background(AppStyle.accent.opacity(0.12), in: Circle())
+        .background(AppColors.bgElevated, in: Circle())
 
       Text(label)
         .font(.subheadline.weight(.medium))
@@ -160,10 +160,10 @@ struct OnboardingPermissionGroup<Content: View>: View {
     VStack(spacing: 0) {
       content()
     }
-    .background(AppStyle.panel, in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous))
+    .background(AppColors.bgCard, in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous))
     .overlay {
       RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-        .stroke(AppStyle.hairline)
+        .stroke(AppColors.borderSubtle)
     }
   }
 }
@@ -187,13 +187,13 @@ struct OnboardingToggleRow: View {
       Toggle("", isOn: $isOn)
         .labelsHidden()
         .toggleStyle(.switch)
-        .tint(AppStyle.accent)
+        .tint(AppColors.textPrimary)
     }
     .padding(AppStyle.Spacing.small)
-    .background(AppStyle.panel, in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous))
+    .background(AppColors.bgCard, in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous))
     .overlay {
       RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-        .stroke(AppStyle.hairline)
+        .stroke(AppColors.borderSubtle)
     }
   }
 }
@@ -207,7 +207,7 @@ struct OnboardingProgressBar: View {
         RoundedRectangle(cornerRadius: 4, style: .continuous)
           .fill(Color.primary.opacity(0.1))
         RoundedRectangle(cornerRadius: 4, style: .continuous)
-          .fill(AppStyle.accent)
+          .fill(AppColors.textPrimary)
           .frame(width: max(0, geo.size.width * min(1, max(0, progress))))
           .animation(.easeInOut(duration: 0.3), value: progress)
       }
@@ -460,11 +460,11 @@ private struct OnboardingScrollBottomFade: View {
   var body: some View {
     LinearGradient(
       stops: [
-        .init(color: AppStyle.canvas.opacity(0), location: 0),
-        .init(color: AppStyle.canvas.opacity(0), location: fadeStartLocation),
-        .init(color: AppStyle.canvas.opacity(0.28), location: fadeStartLocation + (1 - fadeStartLocation) * 0.45),
-        .init(color: AppStyle.canvas.opacity(0.76), location: fadeStartLocation + (1 - fadeStartLocation) * 0.75),
-        .init(color: AppStyle.canvas, location: 1),
+        .init(color: AppColors.bgBase.opacity(0), location: 0),
+        .init(color: AppColors.bgBase.opacity(0), location: fadeStartLocation),
+        .init(color: AppColors.bgBase.opacity(0.28), location: fadeStartLocation + (1 - fadeStartLocation) * 0.45),
+        .init(color: AppColors.bgBase.opacity(0.76), location: fadeStartLocation + (1 - fadeStartLocation) * 0.75),
+        .init(color: AppColors.bgBase, location: 1),
       ],
       startPoint: .top,
       endPoint: .bottom
