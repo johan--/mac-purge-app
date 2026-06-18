@@ -111,6 +111,36 @@ struct OnboardingFeatureChip: View {
   }
 }
 
+/// Small rounded pill carrying a safety boundary message: a tinted icon plus muted text.
+struct OnboardingSafetyChip: View {
+  let symbol: String
+  let iconColor: Color
+  let label: String
+
+  var body: some View {
+    HStack(spacing: 6) {
+      Image(systemName: symbol)
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(iconColor)
+        .accessibilityHidden(true)
+
+      Text(label)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+    .padding(.horizontal, AppStyle.Spacing.small)
+    .padding(.vertical, AppStyle.Spacing.xSmall)
+    .background(AppColors.bgCard, in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous))
+    .overlay {
+      RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+        .stroke(AppColors.borderSubtle)
+    }
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(label)
+  }
+}
+
 struct OnboardingPermissionRow: View {
   let title: String
   let description: String
@@ -186,7 +216,7 @@ struct OnboardingPermissionGroup<Content: View>: View {
 
 struct OnboardingToggleRow: View {
   let title: String
-  let subtitle: String
+  var subtitle: String? = nil
   @Binding var isOn: Bool
 
   var body: some View {
@@ -194,16 +224,18 @@ struct OnboardingToggleRow: View {
       VStack(alignment: .leading, spacing: 2) {
         Text(title)
           .font(.subheadline.weight(.medium))
-        Text(subtitle)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-          .fixedSize(horizontal: false, vertical: true)
+        if let subtitle {
+          Text(subtitle)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
       }
       Spacer(minLength: 8)
       Toggle("", isOn: $isOn)
         .labelsHidden()
         .toggleStyle(.switch)
-        .tint(AppColors.textPrimary)
+        .tint(AppColors.tagSafeText)
     }
     .padding(AppStyle.Spacing.small)
     .background(AppColors.bgCard, in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous))

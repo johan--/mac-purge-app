@@ -39,6 +39,7 @@ struct OnboardingPermissionsStep: View {
         .onboardingBlurIn(index: 1)
       }
       .frame(maxWidth: .infinity)
+      .padding(.top, AppStyle.Spacing.large)
 
       if didOpenFullDiskAccessSettings && !store.hasFullDiskAccess {
         Text("We opened System Settings. Find Purge in the list and toggle it on, then come back here.")

@@ -29,7 +29,7 @@ struct OnboardingWelcomeStep: View {
       HStack(spacing: AppStyle.Spacing.large) {
         OnboardingFeatureChip(symbol: "speaker.slash.fill", label: "Runs silently")
           .onboardingBlurIn(index: 0)
-        OnboardingFeatureChip(symbol: "bell.badge.fill", label: "Smart nudges")
+        OnboardingFeatureChip(symbol: "magnifyingglass", label: "Digs deep")
           .onboardingBlurIn(index: 1)
         OnboardingFeatureChip(symbol: "shield.checkered", label: "Always safe")
           .onboardingBlurIn(index: 2)
