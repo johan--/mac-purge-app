@@ -634,8 +634,7 @@ struct DevToolsView<PageHeader: View>: View {
             Spacer()
             AppSortMenu(selection: sortOptionBinding)
         }
-        .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-        .padding(.vertical, AppStyle.Spacing.xSmall)
+        .scanTabSelectAllRowLayout()
     }
 
     private var scanControlsChrome: some View {
@@ -693,8 +692,38 @@ struct DevToolsView<PageHeader: View>: View {
             .accessibilityLabel("Scanning developer folders")
     }
 
+    /// Stable anchor pinned to the very top of the results list so a fresh scan or
+    /// first appearance can reset scroll position to the first row.
+    private static var topAnchorID: String { "dev-tools-top" }
+
     private var developerListOnly: some View {
+        ScrollViewReader { proxy in
+            developerListContent
+                .onAppear {
+                    // App launch / tab switch with results already loaded.
+                    if showsDeveloperListContent {
+                        proxy.scrollTo(Self.topAnchorID, anchor: .top)
+                    }
+                }
+                .onChange(of: scanPhase) { newPhase in
+                    // A new scan just finished populating the list.
+                    guard newPhase == .completed else { return }
+                    DispatchQueue.main.async {
+                        proxy.scrollTo(Self.topAnchorID, anchor: .top)
+                    }
+                }
+        }
+    }
+
+    private var developerListContent: some View {
         List {
+            Color.clear
+                .frame(height: 0)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .id(Self.topAnchorID)
+
             ForEach(mergedStandardRowEntries()) { entry in
                 switch entry {
                 case .tool(let entryID, let index):

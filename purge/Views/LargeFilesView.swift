@@ -271,8 +271,7 @@ struct LargeFilesView: View {
 
             AppSortMenu(selection: sortOptionBinding)
         }
-        .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-        .padding(.vertical, AppStyle.Spacing.xSmall)
+        .scanTabSelectAllRowLayout()
     }
 
     private var listStack: some View {
@@ -301,8 +300,38 @@ struct LargeFilesView: View {
         }
     }
 
+    /// Stable anchor pinned to the very top of the results list so a fresh scan or
+    /// first appearance can reset scroll position to the first row.
+    private static let topAnchorID = "large-files-top"
+
     private var resultsList: some View {
+        ScrollViewReader { proxy in
+            resultsListContent
+                .onAppear {
+                    // App launch / tab switch with results already loaded.
+                    if !visibleFiles.isEmpty {
+                        proxy.scrollTo(Self.topAnchorID, anchor: .top)
+                    }
+                }
+                .onChange(of: isLoading) { loading in
+                    // A scan just finished populating the list.
+                    guard !loading else { return }
+                    DispatchQueue.main.async {
+                        proxy.scrollTo(Self.topAnchorID, anchor: .top)
+                    }
+                }
+        }
+    }
+
+    private var resultsListContent: some View {
         List {
+            Color.clear
+                .frame(height: 0)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .id(Self.topAnchorID)
+
             ForEach(visibleFiles) { file in
                 LargeFileRow(
                     file: file,

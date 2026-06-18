@@ -255,6 +255,7 @@ struct FilterSortToolbar: View {
                 count: count
             )
             .opacity(count == 0 && !isOn ? 0.45 : 1.0)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isOn)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(filter.displayName), \(count) items")

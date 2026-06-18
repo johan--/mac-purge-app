@@ -38,6 +38,8 @@ enum AppDetailPageLayout {
     static let verticalPadding: CGFloat = 12
     /// Clear band below a `safeAreaBar` page header before the scroll edge blur ramps up.
     static let scrollEdgeClearanceBelowHeader: CGFloat = 24
+    /// Cancels the default soft scroll-edge inset so list cards sit tight under Select All.
+    static let scanTabScrollContentTopCompensation: CGFloat = -20
     /// Approximate height of `AppSectionPageHeader` (top inset + title + bottom padding).
     static let pageTitleChromeHeight: CGFloat = topContentInset + 24 + AppStyle.Spacing.small
     /// Extra line when a subtitle is shown (spacing + subheadline).
@@ -54,6 +56,11 @@ extension View {
     func scanTabSoftScrollEdge<Chrome: View>(@ViewBuilder chrome: @escaping () -> Chrome) -> some View {
         safeAreaBar(edge: .top, spacing: 0, content: chrome)
             .scrollEdgeEffectStyle(.soft, for: .top)
+            .contentMargins(
+                .top,
+                AppDetailPageLayout.scanTabScrollContentTopCompensation,
+                for: .scrollContent
+            )
     }
 
     /// An invisible page-header sized bar reserves space so cards blur as they pass
@@ -116,6 +123,15 @@ struct AppSectionPageHeader<Trailing: View>: View {
         .padding(.horizontal, AppDetailPageLayout.horizontalInset)
         .padding(.top, AppDetailPageLayout.topContentInset)
         .padding(.bottom, AppStyle.Spacing.small)
+    }
+}
+
+extension View {
+    /// Shared inset for the Select All row on scan tabs.
+    func scanTabSelectAllRowLayout() -> some View {
+        padding(.horizontal, AppDetailPageLayout.horizontalInset)
+            .padding(.top, AppStyle.Spacing.xSmall)
+            .padding(.bottom, AppStyle.Spacing.xxSmall)
     }
 }
 
@@ -1273,7 +1289,7 @@ private struct AppNavIcon: View {
 
         if selected {
             setFillProgressWithoutAnimation(0)
-            withAnimation(.snappy(duration: 0.36)) {
+            withAnimation(.snappy(duration: 0.2)) {
                 fillProgress = 1
             }
         } else {

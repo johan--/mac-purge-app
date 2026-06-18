@@ -100,6 +100,7 @@ struct FilterChip: View {
                 Text(label)
                     .font(.system(size: Self.labelSize, weight: isSelected ? .semibold : .regular))
             }
+            .animation(nil, value: isSelected)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
         } else {
