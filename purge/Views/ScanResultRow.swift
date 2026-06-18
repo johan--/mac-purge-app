@@ -19,18 +19,13 @@ struct ScanResultRow: View {
     let safetyInfo: SafetyInfo
     /// Brand or static row icon; re-resolves for light/dark when using cache/dev/project sources.
     let brandIcon: AdaptiveBrandIconImage.Source?
-    let onRequestUnknownDelete: (() -> Void)?
     /// Small footer line (e.g. artifact kind tag).
     let detailCaption: String?
     let reinstallSafety: ReinstallSafetyStatus?
     let showUncommittedRepoChanges: Bool
 
-    /// Per-row recategorization entry points. When nil, the corresponding menu
-    /// item or badge is hidden.
-    let onRecategorize: (() -> Void)?
-    let onMarkSafe: (() -> Void)?
-    let onMarkMedium: (() -> Void)?
-    let onMarkDanger: (() -> Void)?
+    /// Clears a legacy manual category override. When nil, the corresponding
+    /// badge is hidden.
     let onResetToAutomatic: (() -> Void)?
     let isUserOverride: Bool
     /// When `false`, the row checkbox is disabled (e.g. high-risk items that should not participate in bulk select).
@@ -57,10 +52,6 @@ struct ScanResultRow: View {
         case .danger: return .danger
         case .unknown: return .neutral
         }
-    }
-
-    private var offersUnknownDeletion: Bool {
-        safetyInfo.level == .unknown && onRequestUnknownDelete != nil
     }
 
     private var canSelectForBulk: Bool {
@@ -90,14 +81,9 @@ struct ScanResultRow: View {
         formattedSize: String,
         safetyInfo: SafetyInfo,
         brandIcon: AdaptiveBrandIconImage.Source?,
-        onRequestUnknownDelete: (() -> Void)?,
         detailCaption: String? = nil,
         reinstallSafety: ReinstallSafetyStatus? = nil,
         showUncommittedRepoChanges: Bool = false,
-        onRecategorize: (() -> Void)? = nil,
-        onMarkSafe: (() -> Void)? = nil,
-        onMarkMedium: (() -> Void)? = nil,
-        onMarkDanger: (() -> Void)? = nil,
         onResetToAutomatic: (() -> Void)? = nil,
         isUserOverride: Bool = false,
         allowsBulkSelection: Bool = true,
@@ -111,14 +97,9 @@ struct ScanResultRow: View {
         self.formattedSize = formattedSize
         self.safetyInfo = safetyInfo
         self.brandIcon = brandIcon
-        self.onRequestUnknownDelete = onRequestUnknownDelete
         self.detailCaption = detailCaption
         self.reinstallSafety = reinstallSafety
         self.showUncommittedRepoChanges = showUncommittedRepoChanges
-        self.onRecategorize = onRecategorize
-        self.onMarkSafe = onMarkSafe
-        self.onMarkMedium = onMarkMedium
-        self.onMarkDanger = onMarkDanger
         self.onResetToAutomatic = onResetToAutomatic
         self.isUserOverride = isUserOverride
         self.allowsBulkSelection = allowsBulkSelection
@@ -131,9 +112,6 @@ struct ScanResultRow: View {
     var body: some View {
         rowBody
             .modifier(ScanResultRowChrome(showsCardChrome: showsCardChrome, canSelectForBulk: canSelectForBulk))
-            .contextMenu {
-                rowContextMenu
-            }
     }
 
     private var rowBody: some View {
@@ -291,44 +269,6 @@ struct ScanResultRow: View {
         }
     }
 
-    @ViewBuilder
-    private var rowContextMenu: some View {
-        if let onRecategorize {
-            Button("Recategorize") {
-                onRecategorize()
-            }
-        }
-
-        if hasAnyMarkAction {
-            Divider()
-            if let onMarkSafe, safetyInfo.level != .safe {
-                Button("Mark as Safe to Clean") { onMarkSafe() }
-            }
-            if let onMarkMedium, safetyInfo.level != .medium {
-                Button("Mark as Check First") { onMarkMedium() }
-            }
-            if let onMarkDanger, safetyInfo.level != .danger {
-                Button("Mark as Do Not Delete") { onMarkDanger() }
-            }
-        }
-
-        if isUserOverride, let onResetToAutomatic {
-            Divider()
-            Button("Reset to automatic") { onResetToAutomatic() }
-        }
-
-        if offersUnknownDeletion {
-            Divider()
-            Button("Delete…", role: .destructive) {
-                onRequestUnknownDelete?()
-            }
-        }
-    }
-
-    private var hasAnyMarkAction: Bool {
-        onMarkSafe != nil || onMarkMedium != nil || onMarkDanger != nil
-    }
-
     /// Reserves exactly two lines of subheadline-sized text so rows with short
     /// explanations don't shrink between the placeholder and loaded states.
     static let subheadlineTwoLineHeight: CGFloat = {
@@ -423,14 +363,9 @@ private struct ScanResultRowPlaceholder: View {
             formattedSize: Self.formattedSize(for: seed),
             safetyInfo: Self.safetyInfo(for: seed, showsExtraBadges: showsExtraBadges),
             brandIcon: nil,
-            onRequestUnknownDelete: nil,
             detailCaption: showsExtraBadges ? Self.detailCaption(for: seed) : nil,
             reinstallSafety: nil,
             showUncommittedRepoChanges: false,
-            onRecategorize: nil,
-            onMarkSafe: nil,
-            onMarkMedium: nil,
-            onMarkDanger: nil,
             onResetToAutomatic: nil,
             isUserOverride: false,
             allowsBulkSelection: true,

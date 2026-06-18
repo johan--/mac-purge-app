@@ -737,16 +737,9 @@ struct DevToolsView<PageHeader: View>: View {
                         formattedSize: tool.formattedSize,
                         safetyInfo: tool.safetyInfo,
                         brandIcon: .devTool(tool),
-                        onRequestUnknownDelete: tool.safetyInfo.level == .unknown
-                            ? { store.requestUnknownDeletion(candidates: store.unknownDeletionCandidates(forDevTool: tool)) }
-                            : nil,
                         detailCaption: nil,
                         reinstallSafety: tool.reinstallSafety,
                         showUncommittedRepoChanges: !isDevToolMetadataPending(tool) && toolShowsUncommitted(tool),
-                        onRecategorize: primaryPath != nil ? { store.recategorizeDevTool(id: toolID) } : nil,
-                        onMarkSafe: primaryPath != nil ? { store.markDevTool(id: toolID, as: .safe) } : nil,
-                        onMarkMedium: primaryPath != nil ? { store.markDevTool(id: toolID, as: .medium) } : nil,
-                        onMarkDanger: primaryPath != nil ? { store.markDevTool(id: toolID, as: .danger) } : nil,
                         onResetToAutomatic: primaryPath != nil ? { store.resetDevToolToAutomatic(id: toolID) } : nil,
                         isUserOverride: primaryPath.map { store.userOverridePaths.contains($0.standardizedFileURL.path) } ?? false,
                         isMetadataPending: isDevToolMetadataPending(tool)
@@ -773,14 +766,9 @@ struct DevToolsView<PageHeader: View>: View {
                                     formattedSize: device.formattedSize,
                                     safetyInfo: device.safetyInfo,
                                     brandIcon: .sfSymbol("ipad.and.iphone"),
-                                    onRequestUnknownDelete: nil,
                                     detailCaption: nil,
                                     reinstallSafety: .notApplicable,
                                     showUncommittedRepoChanges: false,
-                                    onRecategorize: nil,
-                                    onMarkSafe: nil,
-                                    onMarkMedium: nil,
-                                    onMarkDanger: nil,
                                     onResetToAutomatic: nil,
                                     isUserOverride: false,
                                     allowsBulkSelection: !device.isDanger,
@@ -1073,9 +1061,6 @@ struct DevToolsView<PageHeader: View>: View {
            store.projectGroups[gi].artifacts[ai].id == artifactID {
             let art = store.projectGroups[gi].artifacts[ai]
             let artifactPath = art.path.standardizedFileURL.path
-            let unknownHandler: (() -> Void)? = art.safetyInfo.level == .unknown
-                ? { store.requestUnknownDeletion(candidates: store.unknownDeletionCandidates(forArtifact: art)) }
-                : nil
 
             ScanResultRow(
                 isSelected: bindingForArtifact(groupID: groupID, artifactID: artifactID),
@@ -1083,14 +1068,9 @@ struct DevToolsView<PageHeader: View>: View {
                 formattedSize: art.formattedSize,
                 safetyInfo: art.safetyInfo,
                 brandIcon: nil,
-                onRequestUnknownDelete: unknownHandler,
                 detailCaption: nil,
                 reinstallSafety: nil,
                 showUncommittedRepoChanges: !isArtifactMetadataPending(art) && art.gitStatus == .dirty,
-                onRecategorize: { store.recategorizeProjectArtifact(groupID: groupID, artifactID: artifactID) },
-                onMarkSafe: { store.markProjectArtifact(groupID: groupID, artifactID: artifactID, as: .safe) },
-                onMarkMedium: { store.markProjectArtifact(groupID: groupID, artifactID: artifactID, as: .medium) },
-                onMarkDanger: { store.markProjectArtifact(groupID: groupID, artifactID: artifactID, as: .danger) },
                 onResetToAutomatic: { store.resetProjectArtifactToAutomatic(groupID: groupID, artifactID: artifactID) },
                 isUserOverride: store.userOverridePaths.contains(artifactPath),
                 showsBulkCheckbox: false,

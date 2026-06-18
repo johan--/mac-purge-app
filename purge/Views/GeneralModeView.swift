@@ -311,16 +311,9 @@ struct AppCachesView<PageHeader: View>: View {
                     formattedSize: item.formattedSize,
                     safetyInfo: item.safetyInfo,
                     brandIcon: .cacheItem(item),
-                    onRequestUnknownDelete: item.safetyInfo.level == .unknown
-                        ? { store.requestUnknownDeletion(candidates: PurgeStore.DeletionCandidate.deletionCandidates(forCache: item)) }
-                        : nil,
                     detailCaption: nil,
                     reinstallSafety: reinstallDisplay(for: item),
                     showUncommittedRepoChanges: item.gitStatus == .dirty,
-                    onRecategorize: { store.recategorizeCacheItem(id: itemID) },
-                    onMarkSafe: { store.markCacheItem(id: itemID, as: .safe) },
-                    onMarkMedium: { store.markCacheItem(id: itemID, as: .medium) },
-                    onMarkDanger: { store.markCacheItem(id: itemID, as: .danger) },
                     onResetToAutomatic: { store.resetCacheItemToAutomatic(id: itemID) },
                     isUserOverride: item.locations.contains {
                         store.userOverridePaths.contains($0.path.standardizedFileURL.path)

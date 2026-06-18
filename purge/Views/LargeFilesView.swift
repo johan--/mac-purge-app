@@ -453,19 +453,6 @@ private struct LargeFileRow: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .modifier(ScanRowCardChrome())
-        .contextMenu {
-            Button("Quick Look") {
-                quickLook()
-            }
-
-            Button("Show in Finder") {
-                revealInFinder()
-            }
-
-            Button(isSelected ? "Deselect" : "Select") {
-                isSelected.toggle()
-            }
-        }
     }
 
     private var rowMainContent: some View {
