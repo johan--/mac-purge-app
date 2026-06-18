@@ -68,18 +68,29 @@ final class FundingStore: ObservableObject {
         info.goal <= 0 ? 1 : min(max(info.raised / info.goal, 0), 1)
     }
 
-    func refresh() async {
+    /// Fetches the latest funding info. Returns `true` only when a fresh payload
+    /// was successfully fetched and decoded, so callers can react to the outcome.
+    @discardableResult
+    func refresh() async -> Bool {
         do {
-            var request = URLRequest(url: Self.remoteURL)
+            // Defeat GitHub's raw CDN cache so a freshly committed amount shows up:
+            // a unique query item plus an ignore-cache policy forces a real fetch.
+            var components = URLComponents(url: Self.remoteURL, resolvingAgainstBaseURL: false)
+            components?.queryItems = [URLQueryItem(name: "t", value: String(Int(Date().timeIntervalSince1970)))]
+            let url = components?.url ?? Self.remoteURL
+            var request = URLRequest(url: url)
             request.timeoutInterval = 10
+            request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let httpResponse = response as? HTTPURLResponse,
                   httpResponse.statusCode == 200 else {
-                return
+                return false
             }
             info = try JSONDecoder().decode(FundingInfo.self, from: data)
+            return true
         } catch {
             // Keep bundled value on any failure.
+            return false
         }
     }
 }
