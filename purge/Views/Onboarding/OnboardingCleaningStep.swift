@@ -78,6 +78,6 @@ struct OnboardingCleaningStep: View {
   }
 
   private static func findings(from candidates: [PurgeStore.DeletionCandidate]) -> [OnboardingScanFinding] {
-    candidates.map { OnboardingScanFinding(title: $0.title, formattedSize: $0.formattedSize) }
+    candidates.map { OnboardingScanFinding(candidate: $0) }
   }
 }

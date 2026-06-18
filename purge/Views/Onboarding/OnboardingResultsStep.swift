@@ -53,7 +53,7 @@ extension PurgeStore {
   func onboardingScanFindings(limit: Int = 12) -> [OnboardingScanFinding] {
     manualSafeCleanupCandidates()
       .prefix(limit)
-      .map { OnboardingScanFinding(title: $0.title, formattedSize: $0.formattedSize) }
+      .map { OnboardingScanFinding(candidate: $0) }
   }
 
   private static let browserDefinitionKeys: Set<String> = [

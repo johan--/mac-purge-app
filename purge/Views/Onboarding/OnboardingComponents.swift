@@ -2,9 +2,23 @@ import AppKit
 import SwiftUI
 
 struct OnboardingScanFinding: Identifiable, Equatable {
-  let id = UUID()
+  /// Stable identity used to deduplicate streamed results: the item's file path,
+  /// falling back to a category+source key when no path is available. Never a
+  /// per-render UUID, so repeat emissions update the existing row instead of
+  /// appending a duplicate.
+  let id: String
   let title: String
   let formattedSize: String
+}
+
+extension OnboardingScanFinding {
+  init(candidate: PurgeStore.DeletionCandidate) {
+    self.init(
+      id: candidate.path.standardizedFileURL.path,
+      title: candidate.title,
+      formattedSize: candidate.formattedSize
+    )
+  }
 }
 
 struct OnboardingLayout {
@@ -12,7 +26,9 @@ struct OnboardingLayout {
   static let horizontalPadding: CGFloat = 48
   static let verticalPadding: CGFloat = 40
   static let buttonWidth: CGFloat = 260
-  static let scrollingListMaxHeight: CGFloat = 324
+  static let scrollingListMaxHeight: CGFloat = 460
+  /// Fixed height for streamed scan rows so the list does not reflow per item.
+  static let scanRowHeight: CGFloat = 56
 }
 
 struct OnboardingPrimaryButton: View {

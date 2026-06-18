@@ -34,11 +34,11 @@ struct OnboardingFirstScanStep: View {
               primaryBadgeText: nil,
               primaryBadgeTone: .neutral
             )
+            .frame(height: OnboardingLayout.scanRowHeight)
             .transition(Self.rowInsertionTransition)
           }
         }
         .padding(.bottom, AppStyle.Spacing.xSmall)
-        .animation(.easeOut(duration: 0.45), value: revealController.revealedItems.count)
       }
       .accessibilityLabel("Items found, \(revealController.revealedItems.count)")
 
