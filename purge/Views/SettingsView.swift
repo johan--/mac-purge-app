@@ -11,13 +11,6 @@ struct SettingsView: View {
     var showsPageHeader = true
     /// When true, the parent owns scrolling and the macOS 26 progressive scroll-edge blur.
     var usesExternalScrollContainer = false
-    // @AppStorage("telemetry.lastSentDate") private var telemetryLastSentTimestamp = 0.0
-
-    // @State private var showTelemetryPreviewSheet = false
-    // @State private var isSendingTelemetry = false
-    // @State private var telemetryError: String?
-    // @State private var telemetryToast: String?
-    // @State private var telemetryToastID = UUID()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -33,9 +26,6 @@ struct SettingsView: View {
                     cleaningScheduleSection
                     devToolsSection
                 }
-
-                // Divider()
-                // telemetrySection
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -49,135 +39,7 @@ struct SettingsView: View {
         .onChange(of: devToolsStalenessThresholdRaw) { _ in
             Task { await store.scanAll() }
         }
-        // .sheet(isPresented: $showTelemetryPreviewSheet) {
-        //     TelemetryPreviewSheet(
-        //         payload: TelemetryService.makePayload(from: store),
-        //         isSending: isSendingTelemetry,
-        //         isSendDisabled: isTelemetrySendDisabled,
-        //         onCancel: { showTelemetryPreviewSheet = false },
-        //         onSend: sendTelemetryReport
-        //     )
-        // }
     }
-
-    /*
-    private var telemetrySection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Help Improve Purge")
-                .font(.headline)
-
-            Text(
-                """
-                Send anonymous scan data to help us identify cache folders more accurately for everyone.
-                """
-            )
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: 24) {
-                    telemetryBulletList(
-                        title: "What gets sent:",
-                        bullets: [
-                            "Cache folders marked Safe to Clean or Check First",
-                            "Your macOS version and app version"
-                        ]
-                    )
-
-                    telemetryBulletList(
-                        title: "What never gets sent:",
-                        bullets: [
-                            "Folders marked Do Not Delete or Not Sure",
-                            "File contents",
-                            "Personal data",
-                            "Your name or any identifier"
-                        ]
-                    )
-                }
-
-                VStack(alignment: .leading, spacing: 12) {
-                    telemetryBulletList(
-                        title: "What gets sent:",
-                        bullets: [
-                            "Cache folders marked Safe to Clean or Check First",
-                            "Your macOS version and app version"
-                        ]
-                    )
-
-                    telemetryBulletList(
-                        title: "What never gets sent:",
-                        bullets: [
-                            "Folders marked Do Not Delete or Not Sure",
-                            "File contents",
-                            "Personal data",
-                            "Your name or any identifier"
-                        ]
-                    )
-                }
-            }
-
-            Text("Last sent: \(telemetryLastSentText)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            HStack(alignment: .center, spacing: 10) {
-                Button("Preview Data") {
-                    telemetryError = nil
-                    showTelemetryPreviewSheet = true
-                }
-                .buttonStyle(.bordered)
-                .disabled(isSendingTelemetry)
-
-                Button(action: sendTelemetryReport) {
-                    HStack(spacing: 6) {
-                        if isSendingTelemetry {
-                            ProgressView()
-                                .controlSize(.small)
-                        }
-                        Text(telemetrySendButtonTitle)
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(AppColors.textPrimary)
-                .disabled(isTelemetrySendDisabled)
-            }
-
-            if let telemetryError {
-                Text(telemetryError)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .transition(.opacity)
-            }
-
-            if let telemetryToast {
-                Text(telemetryToast)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.green)
-                    .id(telemetryToastID)
-                    .transition(.opacity)
-            }
-        }
-    }
-
-    private func telemetryBulletList(title: String, bullets: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-
-            ForEach(bullets, id: \.self) { bullet in
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text("•")
-                        .foregroundStyle(.secondary)
-                    Text(bullet)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-    */
 
     private var appearanceSection: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -320,66 +182,6 @@ struct SettingsView: View {
             }
         }
     }
-
-    /*
-    private var telemetryLastSentDate: Date? {
-        guard telemetryLastSentTimestamp > 0 else { return nil }
-        return Date(timeIntervalSince1970: telemetryLastSentTimestamp)
-    }
-
-    private var telemetryLastSentText: String {
-        guard let telemetryLastSentDate else { return "Never" }
-        return Self.telemetryDateFormatter.string(from: telemetryLastSentDate)
-    }
-
-    private var isTelemetryRateLimited: Bool {
-        guard let telemetryLastSentDate else { return false }
-        return Date().timeIntervalSince(telemetryLastSentDate) < 24 * 60 * 60
-    }
-
-    private var isTelemetrySendDisabled: Bool {
-        isSendingTelemetry || isTelemetryRateLimited
-    }
-
-    private var telemetrySendButtonTitle: String {
-        isTelemetryRateLimited ? "Sent today" : "Send Anonymous Report"
-    }
-
-    private func sendTelemetryReport() {
-        guard !isTelemetrySendDisabled else { return }
-
-        telemetryError = nil
-        telemetryToast = nil
-        isSendingTelemetry = true
-
-        // Telemetry is opt-in only: this is called exclusively by the explicit Settings buttons.
-        Task {
-            let submissionDate = Date()
-            let payload = TelemetryService.makePayload(from: store, submissionDate: submissionDate)
-
-            do {
-                try await TelemetryService.sendTelemetry(payload: payload)
-                telemetryLastSentTimestamp = submissionDate.timeIntervalSince1970
-                showTelemetryPreviewSheet = false
-                showTelemetryToast("Thanks for helping improve Purge 🙌")
-            } catch {
-                telemetryError = "Could not send. Check your connection and try again."
-            }
-
-            isSendingTelemetry = false
-        }
-    }
-
-    private func showTelemetryToast(_ message: String) {
-        telemetryToastID = UUID()
-        withAnimation { telemetryToast = message }
-        let toastID = telemetryToastID
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
-            guard toastID == telemetryToastID else { return }
-            withAnimation { telemetryToast = nil }
-        }
-    }
-    */
 
     private func settingPickerRow<Option: Hashable>(
         title: String,
@@ -654,105 +456,7 @@ struct SettingsView: View {
         formatter.timeStyle = .none
         return formatter
     }()
-
-    /*
-    private static let telemetryDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter
-    }()
-    */
 }
-
-/*
-private struct TelemetryPreviewSheet: View {
-    let payload: TelemetryPayload
-    let isSending: Bool
-    let isSendDisabled: Bool
-    let onCancel: () -> Void
-    let onSend: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("What will be sent")
-                .font(.title3.weight(.semibold))
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("Cache folders (\(payload.totalCount))")
-                        .font(.subheadline.weight(.semibold))
-
-                    Text(previewFolderCategories(payload))
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    Divider()
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("macOS: \(payload.macOSVersion)")
-                        Text("Purge: \(payload.appVersion)")
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-                .padding(12)
-            }
-            .frame(minHeight: 260)
-            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-            }
-
-            Text(
-                """
-                Only Safe to Clean and Check First folders are included.
-                No personal data, file contents, or full folder paths.
-                """
-            )
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-
-            HStack {
-                Spacer()
-
-                Button("Cancel", action: onCancel)
-                    .keyboardShortcut(.cancelAction)
-                    .disabled(isSending)
-
-                Button(action: onSend) {
-                    HStack(spacing: 6) {
-                        if isSending {
-                            ProgressView()
-                                .controlSize(.small)
-                        }
-                        Text(isSending ? "Sending…" : "Send Report")
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(AppColors.textPrimary)
-                .keyboardShortcut(.defaultAction)
-                .disabled(isSendDisabled || isSending)
-            }
-        }
-        .padding(20)
-        .frame(width: 560, height: 460)
-    }
-
-    private func previewFolderCategories(_ payload: TelemetryPayload) -> String {
-        let rows = payload.folderCategoryRows
-        guard !rows.isEmpty else {
-            return "No Safe to Clean or Check First folders in the latest scan."
-        }
-        return rows
-            .map { "\($0.folderName) — \($0.categoryLabel)" }
-            .joined(separator: "\n")
-    }
-}
-*/
 
 private struct SettingsMenuPicker<Option: Hashable>: View {
     @Binding var selection: Option

@@ -124,6 +124,62 @@ Purge needs Full Disk Access to scan your cache folders.
 
 ---
 
+## Build from source
+
+Prefer to build Purge yourself instead of downloading the release? Here is how.
+
+### Prerequisites
+
+- macOS 13.0 or later
+- **Xcode 15 or later** (from the Mac App Store)
+- [Node.js](https://nodejs.org) 18+ and npm — only needed if you want to regenerate brand icons
+
+### Step 1: Clone the repo
+
+```bash
+git clone https://github.com/jithinsabumec/purge-app.git
+cd purge-app
+```
+
+### Step 2: Build and run
+
+Open the project in Xcode and run:
+
+```bash
+open purge.xcodeproj
+```
+
+Then select the **purge** scheme and press **⌘R**.
+
+Or build straight from the command line:
+
+```bash
+# Build a Debug app
+xcodebuild -project purge.xcodeproj -scheme purge -configuration Debug build
+
+# Build a Release app
+xcodebuild -project purge.xcodeproj -scheme purge -configuration Release build
+```
+
+The built `Purge.app` is written under Xcode's DerivedData folder (the build output ends with its path).
+
+### Optional: regenerate brand icons
+
+The app cache icons are generated from [simple-icons](https://simpleicons.org). To rebuild them:
+
+```bash
+npm install
+npm run generate:icons
+```
+
+### Running the tests
+
+```bash
+xcodebuild -project purge.xcodeproj -scheme purge -destination 'platform=macOS' test
+```
+
+---
+
 ## Requirements
 
 - macOS 13.0 or later
