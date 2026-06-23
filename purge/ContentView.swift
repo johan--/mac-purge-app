@@ -169,21 +169,19 @@ struct ContentView: View {
     }
 
     private var detailColumn: some View {
-        Group {
-            if store.hasFullDiskAccess {
-                tabContent
-                    .frame(minWidth: 600, minHeight: 400)
-            } else {
-                PermissionPromptView {
-                    store.refreshPermission()
-                    if store.hasFullDiskAccess && !isRunningPreview {
-                        Task { await store.scanAll() }
-                    }
-                }
+        tabContent
+            .frame(minWidth: 600, minHeight: 400)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .detailColumnCompactTop()
+    }
+
+    private var fullDiskAccessPrompt: some View {
+        PermissionPromptView {
+            store.refreshPermission()
+            if store.hasFullDiskAccess && !isRunningPreview {
+                Task { await store.scanAll() }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .detailColumnCompactTop()
     }
 
     private func scanIfNeeded() async {
@@ -307,9 +305,17 @@ struct ContentView: View {
         case .about:
             aboutTabBody
         case .appCaches:
-            appCachesTabBody
+            if store.hasFullDiskAccess {
+                appCachesTabBody
+            } else {
+                fullDiskAccessPrompt
+            }
         case .devTools:
-            devToolsTabBody
+            if store.hasFullDiskAccess {
+                devToolsTabBody
+            } else {
+                fullDiskAccessPrompt
+            }
         case .largeFiles:
             largeFilesTabBody
         case .settings:

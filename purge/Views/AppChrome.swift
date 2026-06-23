@@ -466,7 +466,7 @@ struct SafeCleanupCelebrationOverlay: View {
                     Button(action: onDone) {
                         Text("Done")
                             .font(.system(size: 15, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(AppColors.buttonPrimaryText)
                             .frame(maxWidth: 300)
                             .padding(.vertical, 11)
                             .background(celebrationAccent, in: Capsule(style: .continuous))

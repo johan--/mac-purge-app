@@ -778,13 +778,13 @@ final class PurgeStore: ObservableObject {
     }
 
     func scanLargeFilesIfNeeded() async {
-        guard hasFullDiskAccess else { return }
+        guard PermissionChecker().canScanLargeFiles() else { return }
         guard !isScanningLargeFiles, !hasCompletedLargeFileScan else { return }
         await scanLargeFiles()
     }
 
     func scanLargeFiles() async {
-        guard hasFullDiskAccess else { return }
+        guard PermissionChecker().canScanLargeFiles() else { return }
         largeFileScanGeneration += 1
         let generation = largeFileScanGeneration
         isScanningLargeFiles = true
