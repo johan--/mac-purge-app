@@ -2653,61 +2653,6 @@
     "scope": "app_caches"
   },
   {
-    "key": "system-library-caches",
-    "display_name": "System App Caches",
-    "tag": "safe",
-    "explanation": "macOS-wide application caches stored under /Library/Caches. Apps recreate these automatically. Removing them may require administrator privileges.",
-    "bundle_ids": [],
-    "aliases": [
-      "system-library-caches"
-    ],
-    "scope": "system"
-  },
-  {
-    "key": "system-library-updates",
-    "display_name": "macOS Software Updates",
-    "tag": "safe",
-    "explanation": "Leftover macOS update and installer payloads under /Library/Updates. Safe to remove; macOS re-downloads updates when needed. Deletion may require administrator privileges.",
-    "bundle_ids": [],
-    "aliases": [
-      "system-library-updates"
-    ],
-    "scope": "system"
-  },
-  {
-    "key": "system-var-log",
-    "display_name": "System Log Files",
-    "tag": "safe",
-    "explanation": "Rotated system log files under /private/var/log. Not your personal documents. macOS recreates logs as needed. Deletion may require administrator privileges.",
-    "bundle_ids": [],
-    "aliases": [
-      "system-var-log"
-    ],
-    "scope": "system"
-  },
-  {
-    "key": "system-diagnostic-pipeline",
-    "display_name": "Diagnostic Pipeline Data",
-    "tag": "safe",
-    "explanation": "Temporary diagnostic pipeline data used by macOS. Safe to remove; the system rebuilds it when needed. Deletion may require administrator privileges.",
-    "bundle_ids": [],
-    "aliases": [
-      "system-diagnostic-pipeline"
-    ],
-    "scope": "system"
-  },
-  {
-    "key": "system-diagnostic-reports",
-    "display_name": "System Crash Reports",
-    "tag": "safe",
-    "explanation": "System-level crash and diagnostic reports under /Library/Logs/DiagnosticReports (distinct from your user Library). Safe to delete. Deletion may require administrator privileges.",
-    "bundle_ids": [],
-    "aliases": [
-      "system-diagnostic-reports"
-    ],
-    "scope": "system"
-  },
-  {
     "key": "link-thumbnail-cache",
     "display_name": "Link Thumbnail Cache",
     "tag": "safe",
