@@ -92,11 +92,24 @@ Unidentified folders are left out of the list entirely — Purge only shows what
 
 Click the download link above and download `Purge.dmg`.
 
-### Step 2: Install
+### Step 2: Verify your download (optional but recommended)
+
+Each release includes a `Purge.dmg.sha256` checksum file. Since Purge is an app that deletes files, you may want to confirm the DMG you downloaded is exactly the one that was published, with nothing altered in transit.
+
+Download both `Purge.dmg` and `Purge.dmg.sha256` into the same folder, then in Terminal:
+
+```bash
+cd ~/Downloads
+shasum -a 256 -c Purge.dmg.sha256
+```
+
+A result of `Purge.dmg: OK` means the file matches the published release.
+
+### Step 3: Install
 
 Open `Purge.dmg` and drag Purge to your Applications folder.
 
-### Step 3: Open for the first time
+### Step 4: Open for the first time
 
 Since Purge is not on the Mac App Store, macOS will block it the first time you try to open it.
 
@@ -113,7 +126,7 @@ Since Purge is not on the Mac App Store, macOS will block it the first time you 
 
 You only need to do this once. After that it opens normally.
 
-### Step 4: Grant Full Disk Access
+### Step 5: Grant Full Disk Access
 
 Purge needs Full Disk Access to scan your cache folders.
 
@@ -121,6 +134,28 @@ Purge needs Full Disk Access to scan your cache folders.
 2. Find Purge in the list
 3. Turn on the toggle next to Purge
 4. Come back to the app and click **I've granted access**
+
+---
+
+## Updating
+
+Purge isn't on the Mac App Store, so it doesn't update itself automatically. Instead, it checks for you and makes updating a quick manual swap.
+
+### Checking for a new version
+
+Open the **About** screen inside Purge and use **Check for Updates**. It compares your version against the latest GitHub release. If a newer one exists, it points you to the release page so you can download it. This is a notifier only — it doesn't download or install the update for you.
+
+You can also just visit the [releases page](https://github.com/jithinsabumec/purge-app/releases/latest) anytime.
+
+### Installing the update
+
+1. Download the latest `Purge.dmg` from the release page
+2. Open it and drag Purge into your Applications folder
+3. When asked, choose **Replace** to overwrite the old version
+
+That's it. Your settings, cleaning schedule, and history are kept — they live separately from the app, so replacing the app doesn't touch them. You won't need to grant Full Disk Access again either; the permission stays with Purge.
+
+One thing to expect: because the app is unsigned, the first time you open a freshly downloaded update macOS may block it again, the same as the very first install. If that happens, use the same **Open Anyway** step from [Step 4](#step-4-open-for-the-first-time) above. After that one click it opens normally.
 
 ---
 
@@ -193,6 +228,25 @@ xcodebuild -project purge.xcodeproj -scheme purge -destination 'platform=macOS' 
 Purge runs entirely on your Mac. Scans, explanations, manual overrides, and cleanup history stay in local Application Support — nothing is uploaded.
 
 Purge never reads or sends file contents.
+
+---
+
+## Security
+
+Purge deletes files, so safety is the point. A few things worth knowing:
+
+- **Trash by default** — nothing is permanently deleted. Items move to the macOS Trash and can be restored until you empty it.
+- **Allowlist-based deletion** — only paths that match an explicit safety allowlist are ever eligible for cleanup. Anything Purge does not recognize is never touched.
+- **You choose what goes** — Purge shows what is reclaimable and you decide what to clear.
+- **Open source** — the full deletion logic, including the allowlist, is in this repo for you to read or build from source yourself.
+
+Found a safety gap or a path that could be deleted when it shouldn't be? Please report it. See [SECURITY.md](SECURITY.md) for how.
+
+---
+
+## License
+
+Purge is released under the [MIT License](LICENSE). You are free to use, read, modify, and distribute it.
 
 ---
 
