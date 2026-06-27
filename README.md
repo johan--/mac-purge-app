@@ -35,7 +35,10 @@
 
 ---
 
-Your Mac quietly fills up with cache and junk you never see and never asked for. Purge finds it, marks what is safe, and clears it in one click. Nothing is ever deleted permanently; everything moves to the Trash, so anything can come back.
+Your Mac quietly fills up with cache and junk you never see and never asked for. Purge finds it, marks what is safe, and clears it in one click.
+
+> [!NOTE]
+> Nothing is ever deleted permanently. Everything moves to the Trash, so anything can come back.
 
 You do not need to understand any of it to use it. But if you ever want to check, every item carries a plain-English explanation and a safety label, so nothing gets touched that you cannot see and verify first.
 
@@ -82,8 +85,8 @@ Purge assigns a safety label to every item it recognizes:
 
 | Label | Meaning |
 |-------|---------|
-| **Safe to Clean** | Known cache or rebuildable artifact, safe to remove |
-| **Check First** | May be safe, but could cause inconvenience |
+| ✅ **Safe to Clean** | Known cache or rebuildable artifact, safe to remove |
+| ⚠️ **Check First** | May be safe, but could cause inconvenience |
 
 Filter with **All**, **Safe to Clean**, or **Check First** (⌘1–⌘3). Sort by size, date modified, or name.
 
@@ -127,28 +130,46 @@ The labels and explanations are there to be checked, not read cover to cover. Cl
 
 ## Installation
 
-### Step 1: Download
+There are two ways to install Purge: with Homebrew if you live in the terminal, or by downloading the app directly. Both land in the same place.
 
-Click the download link above and download `Purge.dmg`.
+> [!IMPORTANT]
+> Purge is unsigned, so the first time you open it, macOS blocks it once. This is expected, not a problem with the app. Use the Open Anyway steps in [Step 4](#step-4-open-for-the-first-time) below. Installing through Homebrew does not change this.
 
-### Step 2: Verify your download (optional but recommended)
+### Install with Homebrew
 
-Each release includes a `Purge.dmg.sha256` checksum file. Since Purge is an app that deletes files, you may want to confirm the DMG you downloaded is exactly the one that was published, with nothing altered in transit.
+```bash
+brew install --cask jithin-sabu/tap/purge
+```
 
-Download both `Purge.dmg` and `Purge.dmg.sha256` into the same folder, then in Terminal:
+This taps the repo and installs Purge in one step, and Homebrew verifies the download's checksum for you automatically.
+
+### Install manually
+
+The steps below walk through the direct download.
+
+#### Step 1: Download
+
+Click the download link above and download the `.dmg`.
+
+#### Step 2: Verify your download (optional but recommended)
+
+> [!TIP]
+> Since Purge deletes files, verifying the checksum confirms your download is byte-for-byte the one that was published, with nothing altered in transit.
+
+Each release includes a matching `.dmg.sha256` checksum file. Download both the `.dmg` and its `.dmg.sha256` file into the same folder, then in Terminal:
 
 ```bash
 cd ~/Downloads
-shasum -a 256 -c Purge.dmg.sha256
+shasum -a 256 -c Purgev*.dmg.sha256
 ```
 
-A result of `Purge.dmg: OK` means the file matches the published release.
+A result ending in `OK` means the file matches the published release.
 
-### Step 3: Install
+#### Step 3: Install
 
-Open `Purge.dmg` and drag Purge to your Applications folder.
+Open the `.dmg` and drag Purge to your Applications folder.
 
-### Step 4: Open for the first time
+#### Step 4: Open for the first time
 
 Since Purge is not on the Mac App Store, macOS will block it the first time you try to open it.
 
@@ -165,7 +186,7 @@ Since Purge is not on the Mac App Store, macOS will block it the first time you 
 
 You only need to do this once. After that it opens normally.
 
-### Step 5: Grant Full Disk Access
+#### Step 5: Grant Full Disk Access
 
 Purge needs Full Disk Access to scan your cache folders.
 
@@ -180,6 +201,16 @@ Purge needs Full Disk Access to scan your cache folders.
 
 Purge isn't on the Mac App Store, so it doesn't update itself automatically. Instead, it checks for you and makes updating a quick manual swap.
 
+### Updating with Homebrew
+
+If you installed through Homebrew, updating is one command:
+
+```bash
+brew upgrade --cask purge
+```
+
+That pulls the latest release and swaps in the new version. Your settings, schedule, and history are untouched. The rest of this section covers updating a manual download.
+
 ### Checking for a new version
 
 Open the **About** screen inside Purge and use **Check for Updates**. It compares your version against the latest GitHub release. If a newer one exists, it points you to the release page so you can download it. This is a notifier only: it doesn't download or install the update for you.
@@ -188,7 +219,7 @@ You can also just visit the [releases page](https://github.com/jithin-sabu/purge
 
 ### Installing the update
 
-1. Download the latest `Purge.dmg` from the release page
+1. Download the latest `.dmg` from the release page
 2. Open it and drag Purge into your Applications folder
 3. When asked, choose **Replace** to overwrite the old version
 
@@ -292,6 +323,7 @@ Purge is released under the [MIT License](LICENSE). You are free to use, read, m
 ## Support
 
 Purge is free. If it saved you some disk space, you can chip in toward the running costs from the **About** screen inside the app, or directly at [Buy Me a Coffee](https://buymeacoffee.com/jithinsabu).
+
 <div align="center">
 
 <a href="https://buymeacoffee.com/jithinsabu"><img src="https://img.shields.io/badge/support-Buy_me_a_coffee-FFDD00?style=flat&logo=buymeacoffee&logoColor=white" alt="Buy me a coffee" /></a>
@@ -299,7 +331,6 @@ Purge is free. If it saved you some disk space, you can chip in toward the runni
 </div>
 
 ---
-
 
 <div align="center">
 
