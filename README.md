@@ -7,29 +7,17 @@
   <p><b>Free up your Mac. Safely.</b></p>
 
   <p>
-    Clean your Mac's cache and junk.<br/>
-    Open source, trash-by-default, never permanent.
+    Clear out the cache and junk your Mac collects on its own.<br/>
+    Open source, trash-by-default.
   </p>
 
 <p>
-  <a href="https://github.com/jithin-sabu/purge-app/releases/latest">
-    <img src="https://img.shields.io/badge/platform-macOS%2013%2B-black?logo=apple&logoColor=white" alt="Platform: macOS 13+" />
-  </a>
-  <a href="https://developer.apple.com/swiftui/">
-    <img src="https://img.shields.io/badge/built%20with-SwiftUI-F05138?logo=swift&logoColor=white" alt="Built with SwiftUI" />
-  </a>
-  <a href="https://github.com/jithin-sabu/purge-app/blob/main/LICENSE">
-    <img src="https://img.shields.io/github/license/jithin-sabu/purge-app?color=blue" alt="License: MIT" />
-  </a>
-  <a href="https://github.com/jithin-sabu/purge-app/releases/latest">
-    <img src="https://img.shields.io/github/v/release/jithin-sabu/purge-app?label=latest&color=success" alt="Latest release" />
-  </a>
-  <a href="https://github.com/jithin-sabu/purge-app/releases">
-    <img src="https://img.shields.io/github/downloads/jithin-sabu/purge-app/total?label=downloads&color=brightgreen" alt="Total downloads" />
-  </a>
-  <a href="https://github.com/jithin-sabu/purge-app/stargazers">
-    <img src="https://img.shields.io/github/stars/jithin-sabu/purge-app?color=yellow" alt="GitHub stars" />
-  </a>
+  <a href="https://github.com/jithin-sabu/purge-app/releases/latest"><img src="https://img.shields.io/badge/platform-macOS%2013%2B-black?logo=apple&logoColor=white" alt="Platform: macOS 13+" /></a>
+  <a href="https://developer.apple.com/xcode/swiftui/"><img src="https://img.shields.io/badge/built%20with-SwiftUI-F05138?logo=swift&logoColor=white" alt="Built with SwiftUI" /></a>
+  <a href="https://github.com/jithin-sabu/purge-app/blob/main/LICENSE"><img src="https://img.shields.io/github/license/jithin-sabu/purge-app?color=blue" alt="License: MIT" /></a>
+  <a href="https://github.com/jithin-sabu/purge-app/releases/latest"><img src="https://img.shields.io/github/v/release/jithin-sabu/purge-app?label=latest&color=success" alt="Latest release" /></a>
+  <a href="https://github.com/jithin-sabu/purge-app/releases"><img src="https://img.shields.io/github/downloads/jithin-sabu/purge-app/total?label=downloads&color=brightgreen" alt="Total downloads" /></a>
+  <a href="https://github.com/jithin-sabu/purge-app/stargazers"><img src="https://img.shields.io/github/stars/jithin-sabu/purge-app?color=yellow" alt="GitHub stars" /></a>
 </p>
 
   <p>
@@ -48,7 +36,9 @@
 
 ---
 
-Purge scans your Mac for cache files and junk left behind by apps and development tools. Every item gets a plain-English explanation and a safety label before you delete anything. One-click cleanup only touches items marked **Safe to Clean**.
+Your Mac quietly fills up with cache and junk you never see and never asked for. Purge finds it, marks what is safe, and clears it in one click. Nothing is ever deleted permanently; everything moves to the Trash, so anything can come back.
+
+You do not need to understand any of it to use it. But if you ever want to check, every item carries a plain-English explanation and a safety label, so nothing gets touched that you cannot see and verify first.
 
 ---
 
@@ -58,7 +48,7 @@ Purge scans your Mac for cache files and junk left behind by apps and developmen
 
 Scans `~/Library/Caches`, sandbox container caches, and common system junk:
 
-- Per-app cache folders with friendly names, brand icons, and plain-English explanations
+- Per-app cache folders with friendly names, brand icons, and a plain-English explanation if you want to read it
 - System Junk like application logs, crash reports, macOS installers, font cache
 - Duplicate cache locations for the same app merged into a single row
 - Results stream in as they are found
@@ -100,12 +90,14 @@ Filter with **All**, **Safe to Clean**, or **Check First** (⌘1–⌘3). Sort b
 
 Unidentified folders are left out of the list entirely. Purge only shows what it knows about.
 
+The labels and explanations are there to be checked, not read cover to cover. Clean the safe items in one click and move on, or open the reasoning behind any single row first. Either way is fine.
+
 ### Cleaning
 
 - **Clean Safe Items**: one-click cleanup from the sidebar; only Safe to Clean items, with git and lockfile checks
 - **Clean Selected**: pick specific rows, review in a confirmation sheet, then delete
 - **Clean Safe Files Now**: same safe cleanup from the menu bar
-- **Scheduled cleaning**: in **Settings → Cleaning Schedule**, enable **Run automatic cleaning**, choose **How often** (weekly, monthly, or every 3 months) and **Untouched for** (30 days to 12 months). Purge sends a local reminder and cleans safe items when you open the app
+- **Scheduled cleaning**: in **Settings → Cleaning Schedule**, enable **Run automatic cleaning**, choose **How often** (weekly, monthly, or every 3 months) and **Untouched for** (30 days to 12 months). Purge sends a local reminder and cleans safe items when you open the app, so the cleanup keeps happening without you thinking about it
 - All deletions move items to **Trash**, not permanent removal
 
 ### Settings
@@ -298,8 +290,20 @@ Purge is released under the [MIT License](LICENSE). You are free to use, read, m
 
 Purge is free. If it saved you some disk space, you can chip in toward the running costs from the **About** screen inside the app, or directly at [Buy Me a Coffee](https://buymeacoffee.com/jithinsabu).
 
+<div align="center">
+  <a href="https://www.buymeacoffee.com/jithinsabu"><img src="https://img.buymeacoffee.com/button-api/?text=Buy me a coffee&emoji=☕&slug=jithinsabu&button_colour=FFDD00&font_colour=000000&font_family=Lato&outline_colour=000000&coffee_colour=ffffff" alt="Buy me a coffee" /></a>
+</div>
+
 ---
 
-## Built by
 
-Jithin Sabu · [LinkedIn](https://linkedin.com/in/jithinsabu) · [X](https://x.com/sabu_jithin) · [Send Feedback](mailto:design@jithinsabu.com)
+<div align="center">
+
+**Jithin Sabu**
+
+<a href="https://jithinsabu.com"><img src="https://img.shields.io/badge/jithinsabu.com-black?style=flat&logo=safari&logoColor=white" alt="Website" /></a>
+<a href="https://linkedin.com/in/jithinsabu"><img src="https://img.shields.io/badge/LinkedIn-0A66C2?style=flat&logo=linkedin&logoColor=white" alt="LinkedIn" /></a>
+<a href="https://x.com/sabu_jithin"><img src="https://img.shields.io/badge/X-000000?style=flat&logo=x&logoColor=white" alt="X" /></a>
+<a href="mailto:design@jithinsabu.com"><img src="https://img.shields.io/badge/Email-EA4335?style=flat&logo=gmail&logoColor=white" alt="Email" /></a>
+
+</div>
